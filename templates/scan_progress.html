@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Scanning... - NetSecureX{% endblock %}
+{% block content %}
+<h1>Scan in Progress</h1>
+<div class="panel">
+  <p><strong>Target:</strong> {{ scan.target_range }}</p>
+  <p><strong>Scan ID:</strong> {{ scan.id }}</p>
+
+  <div class="progress-bar-outer">
+    <div class="progress-bar-inner" id="progressBar" style="width: 0%;">0%</div>
+  </div>
+  <p id="statusText">Initializing...</p>
+</div>
+
+<script>
+const scanId = {{ scan.id }};
+const bar = document.getElementById('progressBar');
+const statusText = document.getElementById('statusText');
+
+function poll() {
+  fetch(`/api/scan/${scanId}/status`)
+    .then(r => r.json())
+    .then(data => {
+      const pct = data.progress || 0;
+      bar.style.width = pct + '%';
+      bar.textContent = pct + '%';
+
+      if (data.status === 'completed') {
+        statusText.textContent = 'Scan complete. Redirecting to results...';
+        window.location.href = `/scan/${scanId}`;
+      } else if (data.status === 'failed') {
+        statusText.textContent = 'Scan failed: ' + (data.error || 'unknown error');
+      } else {
+        statusText.textContent = 'Scanning network...';
+        setTimeout(poll, 1500);
+      }
+    });
+}
+poll();
+</script>
+{% endblock %}

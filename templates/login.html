@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Login - NetSecureX{% endblock %}
+{% block content %}
+<div class="login-box">
+  <h1>🛡️ NetSecureX</h1>
+  <p class="subtitle">Intelligent Network Vulnerability Scanner &amp; Security Dashboard</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST">
+    <label>Username</label>
+    <input type="text" name="username" required autofocus>
+    <label>Password</label>
+    <input type="password" name="password" required>
+    <button type="submit">Log In</button>
+  </form>
+  <p class="hint">Demo credentials: admin / admin123</p>
+</div>
+{% endblock %}

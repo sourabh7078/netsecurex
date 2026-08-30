@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Scan History - NetSecureX{% endblock %}
+{% block content %}
+<h1>Scan History</h1>
+
+<div class="panel">
+  {% if scans %}
+  <table class="data-table">
+    <thead>
+      <tr><th>ID</th><th>Target</th><th>Status</th><th>Started</th><th>Duration</th><th>Hosts</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for scan in scans %}
+      <tr>
+        <td>{{ scan.id }}</td>
+        <td>{{ scan.target_range }}</td>
+        <td><span class="badge badge-{{ scan.status }}">{{ scan.status }}</span></td>
+        <td>{{ scan.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{{ '%.1f'|format(scan.duration_seconds) + 's' if scan.duration_seconds else '—' }}</td>
+        <td>{{ scan.hosts|length }}</td>
+        <td><a href="{{ url_for('scan_result', scan_id=scan.id) }}">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No scans recorded yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

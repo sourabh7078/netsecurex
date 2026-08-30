@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}New Scan - NetSecureX{% endblock %}
+{% block content %}
+<h1>Start a New Scan</h1>
+
+<div class="panel form-panel">
+  <form method="POST">
+    <label>Target (IP, hostname, or CIDR range e.g. 192.168.56.0/24)</label>
+    <input type="text" name="target" placeholder="192.168.56.101" required>
+
+    <div class="authorize-box">
+      <label class="checkbox-label">
+        <input type="checkbox" name="authorized" required>
+        I confirm I am authorized to scan this target and it is part of a
+        controlled lab / test environment I own or have written permission to assess.
+      </label>
+    </div>
+
+    <button type="submit">Start Scan</button>
+  </form>
+
+  <div class="legal-note">
+    ⚠️ Scanning networks without explicit authorization is illegal in most
+    jurisdictions. NetSecureX is intended for use in authorized lab
+    environments only (e.g. Metasploitable2, your own VMs).
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,146 @@
+[
+  {
+    "service": "ftp",
+    "port": 21,
+    "version_contains": "vsftpd 2.3.4",
+    "cve_id": "CVE-2011-2523",
+    "cvss_score": 9.8,
+    "severity": "Critical",
+    "description": "vsftpd 2.3.4 contains a backdoor triggered by a specific login string, allowing remote command execution."
+  },
+  {
+    "service": "ftp",
+    "port": 21,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 5.3,
+    "severity": "Medium",
+    "description": "FTP service exposed; credentials and data are transmitted in cleartext unless FTPS/SFTP is enforced."
+  },
+  {
+    "service": "telnet",
+    "port": 23,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 6.5,
+    "severity": "Medium",
+    "description": "Telnet is enabled; all traffic including credentials is unencrypted and susceptible to interception."
+  },
+  {
+    "service": "ssh",
+    "port": 22,
+    "version_contains": "openssh 7.2",
+    "cve_id": "CVE-2016-6210",
+    "cvss_score": 5.9,
+    "severity": "Medium",
+    "description": "OpenSSH 7.2 is affected by a user enumeration vulnerability via timing differences during authentication."
+  },
+  {
+    "service": "smtp",
+    "port": 25,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 4.3,
+    "severity": "Low",
+    "description": "SMTP service exposed to the network; verify open-relay configuration and enforce STARTTLS."
+  },
+  {
+    "service": "microsoft-ds",
+    "port": 445,
+    "version_contains": "",
+    "cve_id": "CVE-2017-0144",
+    "cvss_score": 8.1,
+    "severity": "High",
+    "description": "SMBv1 (port 445) may be vulnerable to the EternalBlue remote code execution exploit if unpatched."
+  },
+  {
+    "service": "netbios-ssn",
+    "port": 139,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 5.0,
+    "severity": "Medium",
+    "description": "NetBIOS session service exposed; can leak host/share information and enable enumeration attacks."
+  },
+  {
+    "service": "mysql",
+    "port": 3306,
+    "version_contains": "5.5",
+    "cve_id": "CVE-2012-2122",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "MySQL 5.5.x authentication bypass allowing repeated password guesses to eventually succeed due to a memcmp flaw."
+  },
+  {
+    "service": "mysql",
+    "port": 3306,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 5.0,
+    "severity": "Medium",
+    "description": "Database service exposed directly to the network; should be restricted to application-tier hosts only."
+  },
+  {
+    "service": "rdp",
+    "port": 3389,
+    "version_contains": "",
+    "cve_id": "CVE-2019-0708",
+    "cvss_score": 9.8,
+    "severity": "Critical",
+    "description": "RDP service exposed; if unpatched, vulnerable to BlueKeep pre-authentication remote code execution."
+  },
+  {
+    "service": "vnc",
+    "port": 5900,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 6.8,
+    "severity": "Medium",
+    "description": "VNC service exposed; often configured with weak or no authentication, risking full remote desktop takeover."
+  },
+  {
+    "service": "http",
+    "port": 80,
+    "version_contains": "apache/2.2",
+    "cve_id": "CVE-2011-3192",
+    "cvss_score": 7.8,
+    "severity": "High",
+    "description": "Apache 2.2.x is vulnerable to the 'Range header' denial-of-service attack."
+  },
+  {
+    "service": "http",
+    "port": 80,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 3.1,
+    "severity": "Low",
+    "description": "Unencrypted HTTP service exposed; consider redirecting to HTTPS."
+  },
+  {
+    "service": "https",
+    "port": 443,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 2.6,
+    "severity": "Low",
+    "description": "HTTPS service exposed; confirm TLS configuration disables deprecated protocol versions and weak ciphers."
+  },
+  {
+    "service": "rpcbind",
+    "port": 111,
+    "version_contains": "",
+    "cve_id": "CVE-2015-7236",
+    "cvss_score": 5.0,
+    "severity": "Medium",
+    "description": "rpcbind exposure can be leveraged for UDP amplification denial-of-service attacks."
+  },
+  {
+    "service": "pop3",
+    "port": 110,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 4.3,
+    "severity": "Low",
+    "description": "POP3 service exposed without TLS wrapper (use POP3S / port 995 instead)."
+  }
+]

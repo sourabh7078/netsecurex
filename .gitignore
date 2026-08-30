@@ -1,0 +1,42 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Flask / instance data
+instance/*.db
+instance/*.sqlite3
+*.db
+*.sqlite3
+
+# Generated reports (per-scan artifacts, not source)
+reports/*.docx
+reports/*.pdf
+!reports/.gitkeep
+
+# Environment / secrets
+.env
+.flaskenv
+*.env.local
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+
+# Packaging
+build/
+dist/
+*.egg-info/

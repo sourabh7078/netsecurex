@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - NetSecureX{% endblock %}
+{% block content %}
+<h1>Security Dashboard</h1>
+
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="stat-value">{{ total_hosts }}</div>
+    <div class="stat-label">Hosts Scanned</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ total_vulns }}</div>
+    <div class="stat-label">Total Findings</div>
+  </div>
+  <div class="stat-card critical">
+    <div class="stat-value">{{ critical_vulns }}</div>
+    <div class="stat-label">Critical Findings</div>
+  </div>
+  <div class="stat-card">
+    <a href="{{ url_for('new_scan') }}" class="btn-inline">+ New Scan</a>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>Findings by Severity</h2>
+    <canvas id="severityChart" height="220"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>Recent Scans</h2>
+    {% if scans %}
+    <table class="data-table">
+      <thead><tr><th>ID</th><th>Target</th><th>Status</th><th>Started</th><th></th></tr></thead>
+      <tbody>
+        {% for scan in scans %}
+        <tr>
+          <td>{{ scan.id }}</td>
+          <td>{{ scan.target_range }}</td>
+          <td><span class="badge badge-{{ scan.status }}">{{ scan.status }}</span></td>
+          <td>{{ scan.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td><a href="{{ url_for('scan_result', scan_id=scan.id) }}">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No scans yet. Start your first scan.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+fetch("{{ url_for('api_severity_chart') }}")
+  .then(r => r.json())
+  .then(data => {
+    const labels = ["Critical", "High", "Medium", "Low"];
+    const colors = { Critical: "#c0392b", High: "#e67e22", Medium: "#f1c40f", Low: "#27ae60" };
+    new Chart(document.getElementById('severityChart'), {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: labels.map(l => data[l] || 0),
+          backgroundColor: labels.map(l => colors[l]),
+        }]
+      },
+      options: { plugins: { legend: { position: 'bottom' } } }
+    });
+  });
+</script>
+{% endblock %}
