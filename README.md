@@ -2,6 +2,7 @@
 
 ### Intelligent Network Vulnerability Scanner & Security Dashboard
 
+
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.x-black)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -51,7 +52,7 @@ netsecurex/
 ├── requirements.txt
 ├── LICENSE                    # MIT License + responsible-use notice
 ├── .gitignore                 # Excludes venv, __pycache__, DB, generated reports
-├── templates/                 # login, dashboard, new_scan, scan_progress, scan_result, history
+├── templates/                 # login, dashboard, new_scan, scan_progress, scan_result, history, error
 ├── static/css/style.css       # Dark SOC-themed dashboard styling
 ├── reports/                   # Generated per-scan .docx reports land here (gitignored)
 └── instance/                  # SQLite DB created here at runtime (gitignored)
@@ -103,7 +104,78 @@ Navigate to **http://localhost:5000** and log in with:
 Username: admin
 Password: admin123
 ```
-⚠️ Change `DEMO_USER` in `app.py` (and add password hashing) before any use beyond local academic demonstration.
+⚠️ These are the defaults. Set `NSX_ADMIN_USERNAME` / `NSX_ADMIN_PASSWORD` (see Environment Variables below) to change them — passwords are hashed with Werkzeug's `generate_password_hash` before being compared, never stored or checked in plaintext.
+
+## Environment Variables
+All configuration is optional — sensible defaults are used for local demo/viva purposes. Set these as OS environment variables, or drop them in a `.env` file in the project root (auto-loaded via `python-dotenv` if installed):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NSX_SECRET_KEY` | *(insecure dev key)* | Flask session signing key. **Set this to a random value** before exposing the app beyond localhost. |
+| `NSX_DATABASE_URL` | local SQLite file | SQLAlchemy connection URI. Set to a MySQL URI to use XAMPP (see below). |
+| `NSX_ADMIN_USERNAME` | `admin` | Dashboard login username. |
+| `NSX_ADMIN_PASSWORD` | `admin123` | Dashboard login password (hashed in memory at startup, never stored in plaintext). |
+| `NSX_HOST` | `0.0.0.0` | Interface the Flask server binds to. |
+| `NSX_PORT` | `5000` | Port the Flask server listens on. |
+| `NSX_DEBUG` | `false` | Set to `true`/`1` to enable Flask's debug mode (auto-reload, interactive tracebacks). Keep `false` outside local development. |
+| `NSX_MAX_SCAN_HOSTS` | `1024` | Safety cap on how many addresses a single CIDR scan may cover (protects against an accidental `/8`-sized scan). |
+
+Example `.env` file:
+```
+NSX_SECRET_KEY=change-this-to-a-random-string
+NSX_ADMIN_USERNAME=analyst
+NSX_ADMIN_PASSWORD=a-much-stronger-password
+NSX_DEBUG=false
+```
+
+## Security Notes
+This project was built for academic demonstration, but includes a few practical hardening touches worth calling out in a viva:
+- **Password hashing** — the dashboard login credential is hashed with Werkzeug's PBKDF2-based `generate_password_hash`/`check_password_hash`, not compared in plaintext.
+- **Security headers** — every response sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: same-origin`.
+- **CIDR safety cap** — scans are capped at `NSX_MAX_SCAN_HOSTS` addresses (default 1024, i.e. a /22) so a typo like `10.0.0.0/8` can't trigger a 16-million-address scan.
+- **Authorization gate** — every scan requires an explicit on-screen confirmation before it runs (see [Legal & Ethical Notice](#legal--ethical-notice)).
+- **Structured logging** — logins, scan starts/completions/failures, and unhandled server errors are logged via Python's `logging` module instead of stray `print()` calls.
+- Still **not** production-hardened: there's a single shared admin account with no rate-limiting on login attempts, and the Flask development server is single-process. See "Running in Production" below if you need more than a local demo.
+
+## Running in Production
+The built-in `python app.py` uses Flask's development server, which is fine for a local demo but not recommended for real deployment. For anything beyond localhost:
+```bash
+# Linux/macOS
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 app:app
+
+# Windows (gunicorn doesn't support Windows natively)
+pip install waitress
+waitress-serve --port=5000 app:app
+```
+Also set `NSX_SECRET_KEY` to a random value and keep `NSX_DEBUG=false` (the default) in any environment beyond your own machine.
+
+## Using XAMPP / MySQL Instead of SQLite
+By default NetSecureX uses SQLite (zero-config, ideal for a quick demo). If your lab environment already has **XAMPP** set up and you'd prefer MySQL:
+
+1. Open the **XAMPP Control Panel** and click **Start** next to MySQL. (Apache isn't needed — Flask runs its own dev server on port 5000.)
+2. Go to **http://localhost/phpmyadmin**, click **New**, name the database `netsecurex` (collation `utf8mb4_general_ci`), and click **Create**.
+3. Install the MySQL driver in your virtual environment:
+   ```bash
+   pip install PyMySQL
+   ```
+   (already included in `requirements.txt`)
+4. Set the `NSX_DATABASE_URL` environment variable before running the app:
+   ```bash
+   # Windows (cmd.exe)
+   set NSX_DATABASE_URL=mysql+pymysql://root:@localhost:3306/netsecurex
+
+   # macOS / Linux (bash)
+   export NSX_DATABASE_URL="mysql+pymysql://root:@localhost:3306/netsecurex"
+   ```
+5. Run the app as usual:
+   ```bash
+   python app.py
+   ```
+   The console will print which database backend is active. On first run, the five tables (`scans`, `hosts`, `ports`, `vulnerabilities`, `risk_scores`) are created automatically inside the `netsecurex` database — verify this anytime under phpMyAdmin → **Structure**.
+6. **Tip for the viva:** keep a phpMyAdmin tab open on the `hosts` or `vulnerabilities` table and refresh it while a scan runs, to show data being written live.
+
+If `NSX_DATABASE_URL` isn't set, the app falls back to SQLite automatically — no code changes needed to switch back.
 
 ## Publishing to GitHub
 If you're pushing this project to your own GitHub repository:
