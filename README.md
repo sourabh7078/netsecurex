@@ -1,7 +1,6 @@
 # 🛡️ NetSecureX
 
 ### Intelligent Network Vulnerability Scanner & Security Dashboard
-**MCA Final Year Project** — Cybersecurity Specialization
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.x-black)
