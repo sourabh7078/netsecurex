@@ -28,6 +28,7 @@ automated reporting.
 - **CVSS-Weighted Risk Scoring** — per-host and network-wide risk scores with severity bands
 - **Persistent Scan History** — SQLite (or MySQL/XAMPP) via SQLAlchemy (scans, hosts, ports, vulnerabilities, risk_scores)
 - **Web Dashboard** — login-gated, live scan progress, severity charts (Chart.js), scan history
+- **Zenmap-Style Terminal Output** — a "Nmap Output" tab on every scan result, rendering findings as classic color-coded Nmap terminal text (green for open ports, orange for filtered, blue for OS/network details) alongside the structured Findings table
 - **REST API** — JSON endpoints (API-key authenticated) to start scans, poll status, fetch results, and download reports programmatically
 - **Automated Report Generation** — one-click `.docx` report: executive summary, methodology, findings, risk matrix, recommendations
 - **Authorization Gate** — every scan requires an explicit confirmation of authorization before it runs, enforced identically in both the web form and the REST API
@@ -250,7 +251,8 @@ The included `.gitignore` already excludes `__pycache__/`, virtual environments,
 
 ## Demo / Viva Strategy
 1. Set up **Metasploitable2** (or any intentionally vulnerable VM) on an
-   isolated host-only/NAT network alongside your scanning host.
+   isolated host-only/NAT network alongside your scanning host. See "Setting
+   Up a Local Scan Lab" below for the full VM networking walkthrough.
 2. In NetSecureX, start a new scan against the Metasploitable2 IP (or the
    subnet CIDR to demonstrate multi-host discovery).
 3. Show the live progress bar, then the populated dashboard: open ports,
@@ -259,6 +261,17 @@ The included `.gitignore` already excludes `__pycache__/`, virtual environments,
 5. **Before/after demo:** stop a service or open a new port on the VM,
    re-scan, and show the new finding appear — a strong talking point for
    "scan history and trend comparison."
+
+## Setting Up a Local Scan Lab (Kali + Metasploitable2)
+1. Create a **Host-Only network** (VirtualBox: File → Host Network Manager → Create; VMware: use the built-in Host-Only VMnet). This isolates the lab from your real network.
+2. Attach both your Kali VM and Metasploitable2 VM to that same host-only network (Settings → Network → Attached to: Host-Only Adapter).
+3. Start Metasploitable2, log in (`msfadmin` / `msfadmin`), run `ifconfig eth0` and note its IP (e.g. `192.168.56.101`).
+4. Start Kali (or just use your physical host machine — either works, since both are on the host-only network), run `ip a` / `ipconfig` to find your own IP, and confirm connectivity with `ping 192.168.56.101`.
+5. Run NetSecureX as usual (`python app.py`) and scan the Metasploitable2 IP from the dashboard.
+
+**Default scanned ports (34 total)** now cover Metasploitable2's full known-vulnerable service set out of the box: 21 (ftp), 22 (ssh), 23 (telnet), 25 (smtp), 53 (dns), 80 (http), 110 (pop3), 111 (rpcbind), 135 (msrpc), 139/445 (samba), 143 (imap), 443 (https), 512/513/514 (rexec/rlogin/rsh), 993/995 (imaps/pop3s), 1099 (Java RMI), 1524 (ingreslock backdoor), 1723 (pptp), 2049 (nfs), 3306 (mysql), 3389 (rdp), 3632 (distccd), 5432 (postgresql), 5900 (vnc), 6000 (X11), 6667/6697 (irc), 8009 (ajp13), 8080 (http-proxy), 8180 (tomcat), 8443 (https-alt). A default scan against Metasploitable2 now typically surfaces 5–6 Critical findings, including the vsFTPd backdoor, the Samba `usermap_script` RCE, the `ingreslock` root-shell backdoor, distccd RCE, and the UnrealIRCd trojan backdoor — good breadth for a viva demo.
+
+⚠️ **Never attach Metasploitable2 to a Bridged or NAT network.** It's intentionally full of unpatched vulnerabilities — keep it strictly on an isolated host-only network so nothing else on your LAN is exposed to it.
 
 ## Risk Scoring Formula
 ```

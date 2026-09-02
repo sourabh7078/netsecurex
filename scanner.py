@@ -61,8 +61,17 @@ NMAP_OS_TIMEOUT = os.environ.get("NSX_NMAP_TIMEOUT", "30s")
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 VULN_DB_PATH = os.path.join(BASE_DIR, "vuln_db.json")
 
-COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143,
-                443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080, 8443]
+COMMON_PORTS = [
+    21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143,
+    443, 445, 512, 513, 514, 993, 995, 1099, 1524, 1723,
+    2049, 3306, 3389, 3632, 5432, 5900, 6000, 6667, 6697,
+    8009, 8080, 8180, 8443,
+]
+# The 512/513/514/1099/1524/2049/3632/5432/6000/6667/6697/8009/8180 additions
+# above cover Metasploitable2's full known-vulnerable service set (rexec/
+# rlogin/rsh, Java RMI, the "ingreslock" root-shell backdoor, NFS, distccd,
+# PostgreSQL, X11, UnrealIRCd, AJP, and the Tomcat manager) so a demo scan
+# against it surfaces the classic teaching CVEs out of the box.
 
 CONNECT_TIMEOUT = 0.6
 BANNER_TIMEOUT = 1.0
@@ -158,9 +167,12 @@ def grab_banner(ip, port):
 SERVICE_MAP = {
     21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "dns",
     80: "http", 110: "pop3", 111: "rpcbind", 135: "msrpc", 139: "netbios-ssn",
-    143: "imap", 443: "https", 445: "microsoft-ds", 993: "imaps", 995: "pop3s",
-    1723: "pptp", 3306: "mysql", 3389: "rdp", 5900: "vnc", 8080: "http-proxy",
-    8443: "https-alt",
+    143: "imap", 443: "https", 445: "microsoft-ds", 512: "exec", 513: "login",
+    514: "shell", 993: "imaps", 995: "pop3s", 1099: "java-rmi",
+    1524: "ingreslock", 1723: "pptp", 2049: "nfs", 3306: "mysql",
+    3389: "rdp", 3632: "distccd", 5432: "postgresql", 5900: "vnc",
+    6000: "X11", 6667: "irc", 6697: "ircs", 8009: "ajp13",
+    8080: "http-proxy", 8180: "http-tomcat", 8443: "https-alt",
 }
 
 
