@@ -1,7 +1,7 @@
 # 🛡️ NetSecureX
 
 ### Intelligent Network Vulnerability Scanner & Security Dashboard
-
+**MCA Final Year Project** — Cybersecurity Specialization
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.x-black)
@@ -22,14 +22,16 @@ automated reporting.
 ## Features
 - **Host Discovery** — TCP-based reachability probing across a single IP, hostname, or CIDR range
 - **Multithreaded Port Scanning** — pure Python (stdlib sockets), no root/Nmap binary required
+- **Optional Real Nmap Integration** — auto-detected upgrade path for more accurate service/version + OS detection, with automatic per-host fallback to the pure-Python scanner
 - **Banner Grabbing & Service Detection** — lightweight fingerprinting of common services
-- **Heuristic OS Fingerprinting** — best-effort OS guess from port/banner signatures
+- **Heuristic OS Fingerprinting** — best-effort OS guess from port/banner signatures (or real `-O` fingerprinting when using Nmap)
 - **Offline Vulnerability Matching** — local JSON signature DB (`vuln_db.json`), no live API dependency
 - **CVSS-Weighted Risk Scoring** — per-host and network-wide risk scores with severity bands
-- **Persistent Scan History** — SQLite via SQLAlchemy (scans, hosts, ports, vulnerabilities, risk_scores)
+- **Persistent Scan History** — SQLite (or MySQL/XAMPP) via SQLAlchemy (scans, hosts, ports, vulnerabilities, risk_scores)
 - **Web Dashboard** — login-gated, live scan progress, severity charts (Chart.js), scan history
+- **REST API** — JSON endpoints (API-key authenticated) to start scans, poll status, fetch results, and download reports programmatically
 - **Automated Report Generation** — one-click `.docx` report: executive summary, methodology, findings, risk matrix, recommendations
-- **Authorization Gate** — every scan requires an explicit on-screen confirmation of authorization before it runs
+- **Authorization Gate** — every scan requires an explicit confirmation of authorization before it runs, enforced identically in both the web form and the REST API
 
 ## Tech Stack
 | Layer | Technology |
@@ -119,6 +121,8 @@ All configuration is optional — sensible defaults are used for local demo/viva
 | `NSX_PORT` | `5000` | Port the Flask server listens on. |
 | `NSX_DEBUG` | `false` | Set to `true`/`1` to enable Flask's debug mode (auto-reload, interactive tracebacks). Keep `false` outside local development. |
 | `NSX_MAX_SCAN_HOSTS` | `1024` | Safety cap on how many addresses a single CIDR scan may cover (protects against an accidental `/8`-sized scan). |
+| `NSX_API_KEY` | *(random, regenerated per run)* | REST API authentication key. Set this to keep it stable across restarts. |
+| `NSX_USE_NMAP` | `false` | Set to `true`/`1` to use real Nmap (if installed) instead of the built-in pure-Python scanner. |
 
 Example `.env` file:
 ```
@@ -176,6 +180,62 @@ By default NetSecureX uses SQLite (zero-config, ideal for a quick demo). If your
 6. **Tip for the viva:** keep a phpMyAdmin tab open on the `hosts` or `vulnerabilities` table and refresh it while a scan runs, to show data being written live.
 
 If `NSX_DATABASE_URL` isn't set, the app falls back to SQLite automatically — no code changes needed to switch back.
+
+## Using Real Nmap Instead of the Built-in Scanner
+By default, NetSecureX uses a pure-Python scanner (stdlib sockets + threading) so it runs anywhere without extra installs or elevated privileges. If you have the real **Nmap** binary available, you can opt into it for more accurate service/version detection and OS fingerprinting:
+
+1. Install Nmap itself (not just the Python wrapper): [nmap.org/download](https://nmap.org/download.html). On Windows, use the official installer; on Kali/Debian/Ubuntu, `sudo apt install nmap`.
+2. Install the Python wrapper:
+   ```bash
+   pip install python-nmap
+   ```
+3. Enable it:
+   ```bash
+   # Windows (cmd)
+   set NSX_USE_NMAP=true
+
+   # macOS/Linux (bash)
+   export NSX_USE_NMAP=true
+   ```
+4. Run the app as usual: `python app.py`.
+
+**How the fallback works:** `scanner.py` checks three things before using real Nmap — `NSX_USE_NMAP=true` is set, the `nmap` binary is found on your system `PATH`, and the `python-nmap` package is importable. If any of those fail, or if Nmap itself errors out on a specific host, that host is automatically scanned with the built-in pure-Python scanner instead — a scan never fails outright just because Nmap isn't available.
+
+**About OS fingerprinting (`-O`):** real OS detection needs raw-socket access, which requires running as **Administrator** (Windows) or with `sudo` (Linux/macOS). Without elevated privileges, Nmap's service/version detection (`-sV`) still works normally, but the OS guess falls back to `"Unknown (requires elevated privileges for -O)"`.
+
+## REST API
+In addition to the web dashboard, NetSecureX exposes a small JSON REST API for programmatic use (scripts, CI pipelines, other tools) — authenticated separately from the dashboard login via an API key.
+
+**Getting your API key:** set `NSX_API_KEY` yourself, or just start the app and check the console — if you haven't set one, a random key is generated and printed on every startup (it changes each restart unless you set `NSX_API_KEY` explicitly).
+
+All API requests must include the header: `X-API-Key: <your-key>`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/scans` | Start a new scan. Body: `{"target": "192.168.56.101", "authorized": true}` |
+| `GET` | `/api/v1/scans` | List recent scans (add `?limit=50` to change the default of 20). |
+| `GET` | `/api/v1/scans/<id>` | Full scan detail — hosts, ports, vulnerabilities, risk scores. |
+| `GET` | `/api/v1/scans/<id>/status` | Lightweight polling: `{"status": "running", "progress": 42}` |
+| `GET` | `/api/v1/scans/<id>/report` | Download the generated `.docx` report for a completed scan. |
+
+Example with `curl`:
+```bash
+# Start a scan
+curl -X POST http://localhost:5000/api/v1/scans \
+  -H "X-API-Key: your-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{"target": "192.168.56.101", "authorized": true}'
+
+# Poll status
+curl http://localhost:5000/api/v1/scans/1/status -H "X-API-Key: your-key-here"
+
+# Get full results once completed
+curl http://localhost:5000/api/v1/scans/1 -H "X-API-Key: your-key-here"
+
+# Download the report
+curl http://localhost:5000/api/v1/scans/1/report -H "X-API-Key: your-key-here" -o report.docx
+```
+The same authorization rules apply as the web form: requests without `"authorized": true` are rejected, and CIDR ranges larger than `NSX_MAX_SCAN_HOSTS` are refused with a `400` response.
 
 ## Publishing to GitHub
 If you're pushing this project to your own GitHub repository:

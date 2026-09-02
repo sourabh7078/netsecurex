@@ -1,27 +1,62 @@
 """
 NetSecureX - Scanning Engine
-Pure-Python implementation (standard library sockets + threading) so the tool
-runs without root privileges or a system Nmap install. If python-nmap + a
-local nmap binary with raw-socket privileges is available, set USE_NMAP=True
-to get more accurate OS fingerprinting and SYN scanning.
+Pure-Python implementation (standard library sockets + threading) by default,
+so the tool runs without root/administrator privileges or a system Nmap
+install. Real Nmap integration (via the python-nmap wrapper) is available as
+an optional, auto-detected upgrade: if the 'nmap' binary is on PATH and the
+python-nmap package is installed, set NSX_USE_NMAP=true to get Nmap's more
+accurate service/version detection and OS fingerprinting (-O), with the
+pure-Python scanner used as an automatic per-host fallback if Nmap fails or
+lacks the privileges OS detection requires.
 
 Modules implemented here:
   1. Host discovery      -> discover_hosts()
-  2. Port scanning        -> scan_ports()
+  2. Port scanning        -> scan_ports()            (pure Python)
+                              nmap_scan_host()         (optional, real Nmap)
   3. Banner grabbing      -> grab_banner()
-  4. OS fingerprinting    -> guess_os()  (best-effort, TTL/banner heuristic)
+  4. OS fingerprinting    -> guess_os()               (heuristic fallback)
+                              nmap_scan_host()'s -O    (real fingerprinting)
   5. Vulnerability match  -> match_vulnerabilities() (local signature DB)
 """
 
 import ipaddress
 import json
 import os
+import shutil
 import socket
 import struct
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-USE_NMAP = False  # flip to True only if nmap binary + python-nmap are installed & permitted
+# ---------------------------------------------------------------------------
+# Optional real-Nmap integration
+# ---------------------------------------------------------------------------
+# Enabled only if ALL of these are true:
+#   1. NSX_USE_NMAP=true is set in the environment
+#   2. the 'nmap' binary is found on PATH
+#   3. the python-nmap package is importable
+# Any check failing silently falls back to the pure-Python scanner below, so
+# the app never crashes just because Nmap isn't installed.
+def _env_bool(name, default=False):
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+_NMAP_REQUESTED = _env_bool("NSX_USE_NMAP", default=False)
+_NMAP_BINARY_FOUND = shutil.which("nmap") is not None
+
+try:
+    import nmap as _python_nmap
+    _NMAP_MODULE_AVAILABLE = True
+except ImportError:
+    _python_nmap = None
+    _NMAP_MODULE_AVAILABLE = False
+
+USE_NMAP = _NMAP_REQUESTED and _NMAP_BINARY_FOUND and _NMAP_MODULE_AVAILABLE
+
+NMAP_OS_TIMEOUT = os.environ.get("NSX_NMAP_TIMEOUT", "30s")
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 VULN_DB_PATH = os.path.join(BASE_DIR, "vuln_db.json")
@@ -182,6 +217,72 @@ def scan_ports(ip, ports=None, progress_cb=None, progress_offset=30, progress_sp
 
 
 # ---------------------------------------------------------------------------
+# 2b. Real Nmap scanning (optional -- used only when USE_NMAP is True)
+# ---------------------------------------------------------------------------
+
+def nmap_scan_host(ip, ports=None):
+    """Scan a single host using the real 'nmap' binary via python-nmap,
+    returning the same shape as scan_ports() plus an OS guess, so callers
+    don't need to know whether Nmap or the pure-Python path produced it.
+
+    Attempts service/version detection (-sV) always, and OS fingerprinting
+    (-O) opportunistically -- OS detection requires elevated privileges
+    (root/Administrator) and raw-socket access, so it's wrapped separately
+    and simply omitted (not fatal) if it fails.
+
+    Raises on any hard failure so the caller (run_scan) can fall back to
+    the pure-Python scanner for that host.
+    """
+    ports = ports or COMMON_PORTS
+    port_str = ",".join(str(p) for p in ports)
+
+    scanner = _python_nmap.PortScanner()
+    scanner.scan(
+        hosts=ip,
+        ports=port_str,
+        arguments=f"-sV --host-timeout {NMAP_OS_TIMEOUT} -T4",
+    )
+
+    if ip not in scanner.all_hosts():
+        return {"ports": [], "os_guess": "Unknown"}
+
+    host_info = scanner[ip]
+    open_ports = []
+    for proto in host_info.all_protocols():
+        for port_no, pdata in host_info[proto].items():
+            if pdata.get("state") != "open":
+                continue
+            product = pdata.get("product", "")
+            version = pdata.get("version", "")
+            version_str = f"{product} {version}".strip() or pdata.get("extrainfo", "")
+            open_ports.append({
+                "port": int(port_no),
+                "protocol": proto,
+                "state": "open",
+                "service": pdata.get("name", "unknown") or "unknown",
+                "version": version_str[:120],
+                "banner": version_str[:120],
+            })
+    open_ports.sort(key=lambda p: p["port"])
+
+    # OS fingerprinting: best-effort, requires -O + privileges. Try it in a
+    # separate pass so a permissions failure here doesn't discard the
+    # perfectly good port results gathered above.
+    os_guess = "Unknown"
+    try:
+        os_scanner = _python_nmap.PortScanner()
+        os_scanner.scan(hosts=ip, arguments=f"-O --host-timeout {NMAP_OS_TIMEOUT}")
+        matches = os_scanner[ip].get("osmatch", []) if ip in os_scanner.all_hosts() else []
+        if matches:
+            os_guess = matches[0].get("name", "Unknown")
+    except Exception:
+        # Common without root/Administrator privileges -- not fatal.
+        os_guess = "Unknown (requires elevated privileges for -O)"
+
+    return {"ports": open_ports, "os_guess": os_guess}
+
+
+# ---------------------------------------------------------------------------
 # 4. OS fingerprinting (best-effort heuristic, no raw sockets required)
 # ---------------------------------------------------------------------------
 
@@ -266,15 +367,32 @@ def run_scan(target, ports=None, progress_cb=None):
 
     for idx, ip in enumerate(live_hosts):
         offset = 30 + idx * per_host_span
-        open_ports = scan_ports(
-            ip, ports=ports, progress_cb=cb,
-            progress_offset=int(offset), progress_span=int(per_host_span),
-        )
+
+        open_ports, os_guess = None, None
+
+        if USE_NMAP:
+            try:
+                nmap_result = nmap_scan_host(ip, ports=ports)
+                open_ports = nmap_result["ports"]
+                os_guess = nmap_result["os_guess"]
+                if progress_cb:
+                    cb(int(offset + per_host_span))
+            except Exception:
+                # Real Nmap failed for this host (not installed correctly,
+                # permissions, host unreachable via Nmap, etc.) -- fall back
+                # to the pure-Python scanner below rather than losing the host.
+                open_ports, os_guess = None, None
+
+        if open_ports is None:
+            open_ports = scan_ports(
+                ip, ports=ports, progress_cb=cb,
+                progress_offset=int(offset), progress_span=int(per_host_span),
+            )
+            os_guess = guess_os(ip, open_ports)
 
         for p in open_ports:
             p["vulnerabilities"] = match_vulnerabilities(p["service"], p.get("version", ""), p["port"])
 
-        os_guess = guess_os(ip, open_ports)
         try:
             hostname = socket.gethostbyaddr(ip)[0]
         except (socket.herror, socket.gaierror):
