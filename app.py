@@ -19,6 +19,11 @@ Environment variables (all optional -- see README.md for the full table):
     NSX_API_KEY            REST API key. Auto-generated (and logged) per run if unset.
     NSX_USE_NMAP           "true"/"1" to use real Nmap (if installed) instead of the
                            built-in pure-Python scanner. See scanner.py for details.
+    NSX_MAX_LOGIN_ATTEMPTS      Failed logins from one IP before lockout. Default: 5
+    NSX_LOGIN_LOCKOUT_SECONDS   Lockout duration in seconds. Default: 300 (5 min)
+    NSX_SESSION_TIMEOUT_MINUTES Session idle timeout in minutes. Default: 60
+    NSX_SESSION_COOKIE_SECURE   "true"/"1" to require HTTPS for the session cookie.
+                                Default: false (enable once served over HTTPS).
 """
 
 import os
@@ -27,7 +32,7 @@ import threading
 import ipaddress
 import secrets
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -46,6 +51,7 @@ from models import db, Scan, Host, Port, Vulnerability
 from scanner import run_scan
 from risk_engine import compute_host_risk, compute_scan_summary
 from report_generator import generate_report
+from nmap_output import build_nmap_style_output
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -93,6 +99,18 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("NSX_DATABASE_URL", _defa
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
+# Session cookie hardening: JS can't read the cookie (mitigates XSS session
+# theft), it's not sent on cross-site requests (mitigates CSRF), and sessions
+# expire after NSX_SESSION_TIMEOUT_MINUTES of inactivity. SESSION_COOKIE_SECURE
+# is off by default because the local dev server runs over plain HTTP -- turn
+# it on (NSX_SESSION_COOKIE_SECURE=true) once the app is served over HTTPS.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = _env_bool("NSX_SESSION_COOKIE_SECURE", default=False)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
+    minutes=int(os.environ.get("NSX_SESSION_TIMEOUT_MINUTES", "60"))
+)
+
 db.init_app(app)
 
 # Safety cap: refuse to enumerate absurdly large ranges (e.g. a /8) from the UI.
@@ -118,6 +136,49 @@ if not API_KEY:
 
 # Track in-progress scans: scan_id -> {"status": ..., "progress": ...}
 SCAN_STATE = {}
+
+# ---------------------------------------------------------------------------
+# Brute-force login protection
+# ---------------------------------------------------------------------------
+# In-memory per-IP tracking: ip -> {"failures": int, "locked_until": datetime|None}
+# This is intentionally simple (no external store) since NetSecureX runs as a
+# single process for a single lab/demo -- swap for Redis-backed rate limiting
+# if deployed with multiple worker processes.
+LOGIN_ATTEMPTS = {}
+MAX_LOGIN_ATTEMPTS = int(os.environ.get("NSX_MAX_LOGIN_ATTEMPTS", "5"))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get("NSX_LOGIN_LOCKOUT_SECONDS", "300"))
+
+
+def _client_ip():
+    # Respects X-Forwarded-For only if you trust your reverse proxy to set it;
+    # for a plain local demo this just falls back to the direct remote address.
+    return request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+
+
+def _is_locked_out(ip):
+    record = LOGIN_ATTEMPTS.get(ip)
+    if not record or not record.get("locked_until"):
+        return False, 0
+    remaining = (record["locked_until"] - datetime.utcnow()).total_seconds()
+    if remaining <= 0:
+        LOGIN_ATTEMPTS.pop(ip, None)
+        return False, 0
+    return True, int(remaining)
+
+
+def _record_login_failure(ip):
+    record = LOGIN_ATTEMPTS.setdefault(ip, {"failures": 0, "locked_until": None})
+    record["failures"] += 1
+    if record["failures"] >= MAX_LOGIN_ATTEMPTS:
+        record["locked_until"] = datetime.utcnow() + timedelta(seconds=LOGIN_LOCKOUT_SECONDS)
+        log.warning(
+            "IP %s locked out for %ss after %d failed login attempts",
+            ip, LOGIN_LOCKOUT_SECONDS, record["failures"],
+        )
+
+
+def _clear_login_failures(ip):
+    LOGIN_ATTEMPTS.pop(ip, None)
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +234,13 @@ def api_key_required(view):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        ip = _client_ip()
+        locked, remaining = _is_locked_out(ip)
+        if locked:
+            log.warning("Blocked login attempt from locked-out IP %s (%ss remaining)", ip, remaining)
+            flash(f"Too many failed attempts. Try again in {remaining} seconds.", "error")
+            return render_template("login.html"), 429
+
         username = request.form.get("username", "")
         password = request.form.get("password", "")
         valid = (
@@ -180,11 +248,15 @@ def login():
             and check_password_hash(ADMIN_PASSWORD_HASH, password)
         )
         if valid:
+            _clear_login_failures(ip)
+            session.permanent = True
             session["logged_in"] = True
             session["username"] = username
             log.info("Successful login for user '%s'", username)
             return redirect(url_for("dashboard"))
-        log.warning("Failed login attempt for username '%s'", username)
+
+        _record_login_failure(ip)
+        log.warning("Failed login attempt for username '%s' from %s", username, ip)
         flash("Invalid credentials", "error")
     return render_template("login.html")
 
@@ -381,7 +453,8 @@ def api_scan_status(scan_id):
 def scan_result(scan_id):
     scan = Scan.query.get_or_404(scan_id)
     summary = compute_scan_summary(scan_id)
-    return render_template("scan_result.html", scan=scan, summary=summary)
+    terminal_lines = build_nmap_style_output(scan, summary["host_rows"]) if summary else []
+    return render_template("scan_result.html", scan=scan, summary=summary, terminal_lines=terminal_lines)
 
 
 @app.route("/scan/<int:scan_id>/report")

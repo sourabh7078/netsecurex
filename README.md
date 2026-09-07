@@ -123,6 +123,10 @@ All configuration is optional — sensible defaults are used for local demo/viva
 | `NSX_MAX_SCAN_HOSTS` | `1024` | Safety cap on how many addresses a single CIDR scan may cover (protects against an accidental `/8`-sized scan). |
 | `NSX_API_KEY` | *(random, regenerated per run)* | REST API authentication key. Set this to keep it stable across restarts. |
 | `NSX_USE_NMAP` | `false` | Set to `true`/`1` to use real Nmap (if installed) instead of the built-in pure-Python scanner. |
+| `NSX_MAX_LOGIN_ATTEMPTS` | `5` | Failed dashboard logins from one IP before it's temporarily locked out. |
+| `NSX_LOGIN_LOCKOUT_SECONDS` | `300` | How long (seconds) a locked-out IP must wait before trying again. |
+| `NSX_SESSION_TIMEOUT_MINUTES` | `60` | Dashboard session idle timeout, in minutes. |
+| `NSX_SESSION_COOKIE_SECURE` | `false` | Set to `true`/`1` to require HTTPS for the session cookie (enable once served over HTTPS). |
 
 Example `.env` file:
 ```
@@ -135,11 +139,13 @@ NSX_DEBUG=false
 ## Security Notes
 This project was built for academic demonstration, but includes a few practical hardening touches worth calling out in a viva:
 - **Password hashing** — the dashboard login credential is hashed with Werkzeug's PBKDF2-based `generate_password_hash`/`check_password_hash`, not compared in plaintext.
+- **Brute-force login protection** — after `NSX_MAX_LOGIN_ATTEMPTS` (default 5) failed logins, an IP is locked out for `NSX_LOGIN_LOCKOUT_SECONDS` (default 300s) and gets a `429 Too Many Requests` response instead of another password attempt. Tracked in memory per-IP; a successful login clears the counter.
+- **Hardened session cookies** — `HttpOnly` (JavaScript can't read the cookie, blunting XSS-based session theft), `SameSite=Lax` (not sent on most cross-site requests, blunting CSRF), and an idle timeout (`NSX_SESSION_TIMEOUT_MINUTES`, default 60). `Secure` (HTTPS-only) is off by default since the dev server runs over plain HTTP locally — turn it on via `NSX_SESSION_COOKIE_SECURE=true` once deployed behind HTTPS.
 - **Security headers** — every response sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: same-origin`.
 - **CIDR safety cap** — scans are capped at `NSX_MAX_SCAN_HOSTS` addresses (default 1024, i.e. a /22) so a typo like `10.0.0.0/8` can't trigger a 16-million-address scan.
 - **Authorization gate** — every scan requires an explicit on-screen confirmation before it runs (see [Legal & Ethical Notice](#legal--ethical-notice)).
-- **Structured logging** — logins, scan starts/completions/failures, and unhandled server errors are logged via Python's `logging` module instead of stray `print()` calls.
-- Still **not** production-hardened: there's a single shared admin account with no rate-limiting on login attempts, and the Flask development server is single-process. See "Running in Production" below if you need more than a local demo.
+- **Structured logging** — logins (including the client IP), lockouts, scan starts/completions/failures, and unhandled server errors are logged via Python's `logging` module instead of stray `print()` calls.
+- Still **not** production-hardened: there's a single shared admin account, the login lockout is in-memory only (resets on restart, and doesn't share state across multiple worker processes), and the Flask development server is single-process. See "Running in Production" below if you need more than a local demo.
 
 ## Running in Production
 The built-in `python app.py` uses Flask's development server, which is fine for a local demo but not recommended for real deployment. For anything beyond localhost:
