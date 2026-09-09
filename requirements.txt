@@ -1,6 +1,15 @@
-VFlask==3.0.3
+Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
-SQLAlchemy==2.0.41
-gunicorn==26.2.0
-# Optional (only needed if USE_NMAP=True in scanner.py and nmap binary is installed):
+Werkzeug==3.0.4              # Password hashing (generate_password_hash / check_password_hash)
+python-docx==1.1.2
+python-dotenv==1.0.1          # Optional: loads a local .env file for environment variables
+PyMySQL==1.1.1                # Only needed if using MySQL/XAMPP instead of the default SQLite
+
+# Optional (real Nmap integration -- requires the 'nmap' binary installed separately
+# and NSX_USE_NMAP=true set; falls back automatically to the built-in pure-Python
+# scanner if either is missing):
 # python-nmap==0.7.1
+
+# Optional (for production deployment instead of the Flask dev server):
+# gunicorn==22.0.0            # Linux/macOS WSGI server: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+# waitress==3.0.0             # Windows-friendly WSGI server: waitress-serve --port=5000 app:app
