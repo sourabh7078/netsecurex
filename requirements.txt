@@ -1,6 +1,6 @@
-Flask==3.0.3
-Flask-SQLAlchemy==3.1.1
-Werkzeug==3.0.4              # Password hashing (generate_password_hash / check_password_hash)
+Flask>=3.0
+Flask-SQLAlchemy>=3.1
+python-docx>=1.1              # Password hashing (generate_password_hash / check_password_hash)
 python-docx==1.1.2
 python-dotenv==1.0.1          # Optional: loads a local .env file for environment variables
 PyMySQL==1.1.1                # Only needed if using MySQL/XAMPP instead of the default SQLite
