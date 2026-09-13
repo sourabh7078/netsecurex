@@ -1,0 +1,54 @@
+# NetSecureX - systemd service file
+#
+# Keeps the app running via gunicorn, auto-restarts on crash or reboot.
+#
+# INSTALL:
+#   1. Copy the project to /opt/netsecurex on your server (or adjust the
+#      paths below to match wherever you deployed it).
+#   2. Create a dedicated, unprivileged system user to run it (never run a
+#      network-facing app as root):
+#        sudo useradd --system --no-create-home --shell /usr/sbin/nologin netsecurex
+#        sudo chown -R netsecurex:netsecurex /opt/netsecurex
+#   3. Put your production secrets in /opt/netsecurex/.env (NSX_SECRET_KEY,
+#      NSX_ADMIN_USERNAME, NSX_ADMIN_PASSWORD, NSX_API_KEY,
+#      NSX_SESSION_COOKIE_SECURE=true, etc.) -- see README.md's
+#      "Environment Variables" section for the full list.
+#   4. Copy this file to /etc/systemd/system/netsecurex.service
+#   5. sudo systemctl daemon-reload
+#   6. sudo systemctl enable netsecurex      # start automatically on boot
+#   7. sudo systemctl start netsecurex
+#   8. sudo systemctl status netsecurex      # verify it's running
+#
+# LOGS:
+#   sudo journalctl -u netsecurex -f         # follow logs live
+#
+# NOTE: -w 1 (a single gunicorn worker) is intentional, not a typo -- this
+# app tracks live scan progress (SCAN_STATE) in memory. Multiple worker
+# processes would each have their own separate copy of that state, so a
+# scan started on one worker wouldn't be visible from another, making the
+# progress bar look stuck. Keep -w 1 unless SCAN_STATE is moved into the
+# database (or Redis) first.
+
+[Unit]
+Description=NetSecureX - Intelligent Network Vulnerability Scanner & Security Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=netsecurex
+Group=netsecurex
+WorkingDirectory=/opt/netsecurex
+EnvironmentFile=/opt/netsecurex/.env
+ExecStart=/opt/netsecurex/venv/bin/gunicorn -w 1 -b 127.0.0.1:5000 --timeout 120 app:app
+Restart=on-failure
+RestartSec=5
+
+# Basic sandboxing -- restricts what this process can touch on the system,
+# beyond just running as an unprivileged user.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/netsecurex/instance /opt/netsecurex/reports
+
+[Install]
+WantedBy=multi-user.target

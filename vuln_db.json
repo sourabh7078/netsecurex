@@ -126,6 +126,114 @@
     "description": "HTTPS service exposed; confirm TLS configuration disables deprecated protocol versions and weak ciphers."
   },
   {
+    "service": "microsoft-ds",
+    "port": 445,
+    "version_contains": "samba 3.0.20",
+    "cve_id": "CVE-2007-2447",
+    "cvss_score": 10.0,
+    "severity": "Critical",
+    "description": "Samba 3.0.20 through 3.0.25rc3 'username map script' allows remote command execution via shell metacharacters in the username field (the classic Metasploitable2 'usermap_script' exploit)."
+  },
+  {
+    "service": "java-rmi",
+    "port": 1099,
+    "version_contains": "",
+    "cve_id": "CVE-2011-3556",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "Java RMI Registry default configuration allows unauthenticated remote class loading, frequently leading to remote code execution."
+  },
+  {
+    "service": "ingreslock",
+    "port": 1524,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 10.0,
+    "severity": "Critical",
+    "description": "Port 1524 is answering with a root shell backdoor (the classic Metasploitable2 'ingreslock' backdoor left over from a prior compromise) -- any connection to this port grants immediate root access."
+  },
+  {
+    "service": "nfs",
+    "port": 2049,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 6.5,
+    "severity": "Medium",
+    "description": "NFS service exposed to the network; misconfigured exports can allow unauthorized mounting and read/write access to shared filesystems."
+  },
+  {
+    "service": "distccd",
+    "port": 3632,
+    "version_contains": "",
+    "cve_id": "CVE-2004-2687",
+    "cvss_score": 9.8,
+    "severity": "Critical",
+    "description": "distccd allows arbitrary command execution via crafted compilation jobs when exposed without access controls, as bundled (misconfigured) in Metasploitable2."
+  },
+  {
+    "service": "postgresql",
+    "port": 5432,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 5.5,
+    "severity": "Medium",
+    "description": "PostgreSQL exposed to the network; verify pg_hba.conf restricts access and default/weak credentials (e.g. postgres/postgres) are not in use."
+  },
+  {
+    "service": "X11",
+    "port": 6000,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 6.0,
+    "severity": "Medium",
+    "description": "X11 server exposed to the network; if access control is disabled (xhost +), this allows remote keystroke capture and screen access."
+  },
+  {
+    "service": "irc",
+    "port": 6667,
+    "version_contains": "unreal",
+    "cve_id": "CVE-2010-2075",
+    "cvss_score": 10.0,
+    "severity": "Critical",
+    "description": "UnrealIRCd 3.2.8.1 contains a trojaned backdoor allowing arbitrary remote command execution via a crafted IRC message."
+  },
+  {
+    "service": "http-tomcat",
+    "port": 8180,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 8.8,
+    "severity": "High",
+    "description": "Apache Tomcat manager application exposed; default/weak credentials (e.g. tomcat/tomcat) commonly allow WAR file upload and remote code execution."
+  },
+  {
+    "service": "exec",
+    "port": 512,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 7.2,
+    "severity": "High",
+    "description": "rexec (port 512) authenticates in cleartext and is considered a legacy, insecure remote execution protocol."
+  },
+  {
+    "service": "login",
+    "port": 513,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "rlogin (port 513) can permit passwordless login from trusted hosts via .rhosts configuration -- a classic legacy trust-based attack vector."
+  },
+  {
+    "service": "shell",
+    "port": 514,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "rsh (port 514) transmits commands and data in cleartext and, like rlogin, is often configured with weak host-based trust."
+  },
+  {
     "service": "rpcbind",
     "port": 111,
     "version_contains": "",

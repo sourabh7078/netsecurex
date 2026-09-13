@@ -1,6 +1,7 @@
 # 🛡️ NetSecureX
 
 ### Intelligent Network Vulnerability Scanner & Security Dashboard
+**MCA Final Year Project** — Cybersecurity Specialization
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.x-black)
@@ -24,14 +25,17 @@ automated reporting.
 - **Optional Real Nmap Integration** — auto-detected upgrade path for more accurate service/version + OS detection, with automatic per-host fallback to the pure-Python scanner
 - **Banner Grabbing & Service Detection** — lightweight fingerprinting of common services
 - **Heuristic OS Fingerprinting** — best-effort OS guess from port/banner signatures (or real `-O` fingerprinting when using Nmap)
-- **Offline Vulnerability Matching** — local JSON signature DB (`vuln_db.json`), no live API dependency
+- **Offline Vulnerability Matching** — local JSON signature DB (`vuln_db.json`), no live API dependency required
+- **Optional Live NVD/CVE Lookup** — supplements the offline database with real-time CVE data from the National Vulnerability Database when enabled, with automatic fallback to offline-only results on any network failure
 - **CVSS-Weighted Risk Scoring** — per-host and network-wide risk scores with severity bands
 - **Persistent Scan History** — SQLite (or MySQL/XAMPP) via SQLAlchemy (scans, hosts, ports, vulnerabilities, risk_scores)
-- **Web Dashboard** — login-gated, live scan progress, severity charts (Chart.js), scan history
+- **Web Dashboard** — login-gated, live scan progress, severity charts (Chart.js), scan history, and a risk-trend-over-time chart across your scan history
 - **Zenmap-Style Terminal Output** — a "Nmap Output" tab on every scan result, rendering findings as classic color-coded Nmap terminal text (green for open ports, orange for filtered, blue for OS/network details) alongside the structured Findings table
 - **REST API** — JSON endpoints (API-key authenticated) to start scans, poll status, fetch results, and download reports programmatically
 - **Automated Report Generation** — one-click `.docx` report: executive summary, methodology, findings, risk matrix, recommendations
 - **Authorization Gate** — every scan requires an explicit confirmation of authorization before it runs, enforced identically in both the web form and the REST API
+- **Automated Test Suite** — pytest coverage for the scanning engine, risk scoring, and REST API
+- **Docker Support** — one-command `docker compose up` for a fully containerized run
 
 ## Tech Stack
 | Layer | Technology |
@@ -48,16 +52,27 @@ netsecurex/
 ├── app.py                 # Flask routes, auth, scan orchestration
 ├── models.py               # SQLAlchemy models (Scan, Host, Port, Vulnerability, RiskScore)
 ├── scanner.py               # Discovery, port scan, banner grab, OS guess, vuln match
-├── risk_engine.py            # CVSS-weighted risk scoring
+├── risk_engine.py            # CVSS-weighted risk scoring + trend aggregation
 ├── report_generator.py        # python-docx report builder
+├── nmap_output.py              # Zenmap-style terminal output formatter
+├── cve_lookup.py                # Optional live NVD/CVE lookup
 ├── vuln_db.json               # Offline vulnerability signature database
 ├── requirements.txt
+├── requirements-dev.txt        # Testing dependencies (pytest)
+├── pytest.ini
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
 ├── LICENSE                    # MIT License + responsible-use notice
 ├── .gitignore                 # Excludes venv, __pycache__, DB, generated reports
 ├── templates/                 # login, dashboard, new_scan, scan_progress, scan_result, history, error
 ├── static/css/style.css       # Dark SOC-themed dashboard styling
+├── tests/                      # pytest suite (scanner, risk engine, API, CVE lookup)
 ├── reports/                   # Generated per-scan .docx reports land here (gitignored)
-└── instance/                  # SQLite DB created here at runtime (gitignored)
+├── instance/                  # SQLite DB created here at runtime (gitignored)
+└── deploy/                    # Production deployment configs
+    ├── netsecurex.service      # systemd unit (gunicorn + auto-restart)
+    └── nginx_netsecurex.conf   # Nginx reverse proxy config
 ```
 
 ## Installation
@@ -108,6 +123,41 @@ Password: admin123
 ```
 ⚠️ These are the defaults. Set `NSX_ADMIN_USERNAME` / `NSX_ADMIN_PASSWORD` (see Environment Variables below) to change them — passwords are hashed with Werkzeug's `generate_password_hash` before being compared, never stored or checked in plaintext.
 
+## Running with Docker
+For a one-command run with no manual venv/dependency setup:
+```bash
+docker compose up --build
+```
+Then open **http://localhost:5000** — same login as above. Stop it with `docker compose down`.
+
+Real secrets go in a `.env` file in the project root (auto-loaded by Docker Compose):
+```
+NSX_SECRET_KEY=some-random-string
+NSX_ADMIN_USERNAME=admin
+NSX_ADMIN_PASSWORD=change-me
+NSX_API_KEY=some-random-string
+```
+`instance/` (the SQLite DB) and `reports/` (generated `.docx` reports) are bind-mounted back to your host, so scan history and reports survive a rebuild or `docker compose down`. Want MySQL instead of SQLite inside Docker too? `docker-compose.yml` has a commented-out `mysql` service — uncomment it and point `NSX_DATABASE_URL` at it (see the comments in that file for the exact connection string).
+
+To build and run without Compose:
+```bash
+docker build -t netsecurex .
+docker run -d -p 5000:5000 -e NSX_SECRET_KEY=change-me --name netsecurex netsecurex
+```
+
+## Testing
+A pytest suite covers the scanning engine, risk scoring, and REST API (`tests/`):
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+- `test_scanner.py` — vulnerability signature matching, OS guessing, service name mapping (no database needed, runs fast)
+- `test_cve_lookup.py` — the optional live-CVE module's safe-by-default behavior, caching, and severity mapping (no network calls made during tests)
+- `test_risk_engine.py` — CVSS-weighted scoring formula and scan summary aggregation, against a disposable temp-file SQLite database
+- `test_api.py` — REST API authentication, input validation (authorization flag, CIDR safety cap), and the brute-force login lockout, using Flask's test client
+
+Tests use a temporary database file (never your real `instance/netsecurex.db`) and mock the actual network scanning calls, so the full suite runs offline in seconds with no lab VMs required.
+
 ## Environment Variables
 All configuration is optional — sensible defaults are used for local demo/viva purposes. Set these as OS environment variables, or drop them in a `.env` file in the project root (auto-loaded via `python-dotenv` if installed):
 
@@ -127,6 +177,10 @@ All configuration is optional — sensible defaults are used for local demo/viva
 | `NSX_LOGIN_LOCKOUT_SECONDS` | `300` | How long (seconds) a locked-out IP must wait before trying again. |
 | `NSX_SESSION_TIMEOUT_MINUTES` | `60` | Dashboard session idle timeout, in minutes. |
 | `NSX_SESSION_COOKIE_SECURE` | `false` | Set to `true`/`1` to require HTTPS for the session cookie (enable once served over HTTPS). |
+| `NSX_USE_LIVE_CVE` | `false` | Set to `true`/`1` to supplement offline signature matches with live NVD lookups. |
+| `NSX_NVD_API_KEY` | *(none)* | Optional. Free from nvd.nist.gov — raises the NVD rate limit from 5 to 50 requests/30s. |
+| `NSX_NVD_TIMEOUT` | `5` | Per-request timeout (seconds) for NVD API calls. |
+| `NSX_NVD_CACHE_TTL` | `3600` | How long (seconds) a live CVE lookup is cached before re-querying NVD. |
 
 Example `.env` file:
 ```
@@ -152,13 +206,69 @@ The built-in `python app.py` uses Flask's development server, which is fine for 
 ```bash
 # Linux/macOS
 pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
+gunicorn -w 1 -b 127.0.0.1:5000 app:app
 
 # Windows (gunicorn doesn't support Windows natively)
 pip install waitress
 waitress-serve --port=5000 app:app
 ```
+⚠️ Use `-w 1` (a single worker), not more. Live scan progress (`SCAN_STATE`) is tracked in memory — multiple gunicorn workers would each keep their own separate copy, so a scan started on one worker wouldn't be visible from another, making the progress bar look stuck.
+
 Also set `NSX_SECRET_KEY` to a random value and keep `NSX_DEBUG=false` (the default) in any environment beyond your own machine.
+
+## Deploying to a Public VPS (Nginx + systemd)
+For a real "always-on" deployment (rather than just running `python app.py` in a terminal), put Nginx in front of gunicorn as a reverse proxy, keep the app itself running via `systemd`, and add free HTTPS. Ready-to-use config files are included in `deploy/`.
+
+⚠️ **Before going further: read this.** Once this app has a public IP, whoever holds the login can point it at *any* address on the internet. You — as the server owner — are legally responsible for what gets scanned from your machine. Keep credentials private even if your code is public on GitHub, and only deploy this somewhere you're comfortable being accountable for.
+
+1. **Get a small VPS** — DigitalOcean, AWS Lightsail, or Linode all offer a $4–6/month Ubuntu 22.04 box, which is plenty. Note its public IP.
+2. **Install prerequisites and copy the project:**
+   ```bash
+   sudo apt update && sudo apt install python3-venv python3-pip nginx -y
+   # copy your netsecurex/ folder to /opt/netsecurex (scp, git clone, etc.)
+   cd /opt/netsecurex
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt gunicorn
+   ```
+3. **Create a dedicated, unprivileged user to run it** — never run a network-facing app as root:
+   ```bash
+   sudo useradd --system --no-create-home --shell /usr/sbin/nologin netsecurex
+   sudo chown -R netsecurex:netsecurex /opt/netsecurex
+   ```
+4. **Set real production secrets** in `/opt/netsecurex/.env` — see the [Environment Variables](#environment-variables) table above. At minimum: `NSX_SECRET_KEY`, `NSX_ADMIN_USERNAME`, `NSX_ADMIN_PASSWORD`, `NSX_API_KEY`, and (after step 6) `NSX_SESSION_COOKIE_SECURE=true`.
+5. **Install the systemd service** (keeps the app running, auto-restarts on crash/reboot):
+   ```bash
+   sudo cp deploy/netsecurex.service /etc/systemd/system/netsecurex.service
+   sudo systemctl daemon-reload
+   sudo systemctl enable netsecurex
+   sudo systemctl start netsecurex
+   sudo systemctl status netsecurex        # confirm it's running
+   sudo journalctl -u netsecurex -f        # follow logs live
+   ```
+6. **Install the Nginx reverse proxy config:**
+   ```bash
+   sudo cp deploy/nginx_netsecurex.conf /etc/nginx/sites-available/netsecurex
+   # edit the file first: replace "yourdomain.com" with your actual domain
+   sudo ln -s /etc/nginx/sites-available/netsecurex /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+7. **Add free HTTPS via Let's Encrypt** (requires a domain pointed at your VPS's IP):
+   ```bash
+   sudo apt install certbot python3-certbot-nginx -y
+   sudo certbot --nginx -d yourdomain.com
+   ```
+   This automatically edits the Nginx config to add the SSL block and an HTTP→HTTPS redirect. Afterward, set `NSX_SESSION_COOKIE_SECURE=true` in your `.env` and restart: `sudo systemctl restart netsecurex`.
+8. **Firewall everything except web traffic:**
+   ```bash
+   sudo apt install ufw -y
+   sudo ufw allow 22/tcp     # SSH
+   sudo ufw allow 80/tcp     # HTTP (redirects to HTTPS)
+   sudo ufw allow 443/tcp    # HTTPS
+   sudo ufw enable
+   ```
+   This blocks direct access to gunicorn's port 5000 from outside — only Nginx (via the loopback interface) can reach it.
 
 ## Using XAMPP / MySQL Instead of SQLite
 By default NetSecureX uses SQLite (zero-config, ideal for a quick demo). If your lab environment already has **XAMPP** set up and you'd prefer MySQL:
@@ -208,6 +318,26 @@ By default, NetSecureX uses a pure-Python scanner (stdlib sockets + threading) s
 **How the fallback works:** `scanner.py` checks three things before using real Nmap — `NSX_USE_NMAP=true` is set, the `nmap` binary is found on your system `PATH`, and the `python-nmap` package is importable. If any of those fail, or if Nmap itself errors out on a specific host, that host is automatically scanned with the built-in pure-Python scanner instead — a scan never fails outright just because Nmap isn't available.
 
 **About OS fingerprinting (`-O`):** real OS detection needs raw-socket access, which requires running as **Administrator** (Windows) or with `sudo` (Linux/macOS). Without elevated privileges, Nmap's service/version detection (`-sV`) still works normally, but the OS guess falls back to `"Unknown (requires elevated privileges for -O)"`.
+
+## Using Live NVD/CVE Lookup
+By default, vulnerability matching is entirely offline (`vuln_db.json`) — reliable for demos, but limited to the signatures curated into that file. Optionally, `cve_lookup.py` can supplement those offline matches with real-time results from the **National Vulnerability Database (NVD)** REST API, using only the Python standard library (`urllib`) — no extra package to install.
+
+**Enable it:**
+```bash
+# Windows (cmd)
+set NSX_USE_LIVE_CVE=true
+
+# macOS/Linux (bash)
+export NSX_USE_LIVE_CVE=true
+```
+Optionally set `NSX_NVD_API_KEY` (free from [nvd.nist.gov/developers/request-an-api-key](https://nvd.nist.gov/developers/request-an-api-key)) to raise NVD's rate limit from 5 to 50 requests per 30 seconds — useful if you're scanning many distinct services in one session.
+
+**How it behaves:**
+- Offline signatures always run first and are never removed or overridden — live results are purely additive, merged in and deduped by CVE ID.
+- A live lookup only fires when a service *and* a version string were actually detected (querying on a bare service name like `"http"` with no version is too broad and wastes rate-limit budget on noise).
+- Results are cached in memory per service/version pair for `NSX_NVD_CACHE_TTL` seconds (default 1 hour), so scanning the same service across many hosts in one session doesn't re-query NVD each time.
+- **Every failure mode is silent and safe**: disabled, no network, DNS failure, timeout, NVD rate-limiting (HTTP 429), or a malformed response all simply return no additional results — a scan never fails or hangs because the live lookup didn't work. This is deliberate: for a live viva demo, you don't want an internet hiccup breaking your scan.
+- Findings are tagged `"source": "offline-db"` or `"source": "live-nvd"` internally, so the two can be told apart if you extend the report/dashboard to display it.
 
 ## REST API
 In addition to the web dashboard, NetSecureX exposes a small JSON REST API for programmatic use (scripts, CI pipelines, other tools) — authenticated separately from the dashboard login via an API key.
@@ -279,6 +409,21 @@ The included `.gitignore` already excludes `__pycache__/`, virtual environments,
 
 ⚠️ **Never attach Metasploitable2 to a Bridged or NAT network.** It's intentionally full of unpatched vulnerabilities — keep it strictly on an isolated host-only network so nothing else on your LAN is exposed to it.
 
+## Adding a Windows Target: Server 2019 (Optional Third Lab Host)
+A Windows machine rounds out the lab nicely — it lets you demonstrate NetSecureX's OS-fingerprinting and Windows-specific signatures (SMB/EternalBlue, RDP/BlueKeep) against a real Windows target rather than only Linux ones.
+
+1. **Download the free evaluation ISO** from `microsoft.com/evalcenter` (search "Windows Server 2019") — genuinely free, 180-day trial, no product key needed, just an email address.
+2. **Create the VM:** VirtualBox → New → Type: Windows, Version: Windows 2019 (64-bit), 4GB+ RAM, 40GB+ disk. Attach the ISO under Settings → Storage before first boot.
+3. **Install:** choose "Windows Server 2019 Standard Evaluation (Desktop Experience)" (the GUI edition), custom install, set the Administrator password when prompted.
+4. **Network it the same way as the others:** Settings → Network → Adapter 1 → Host-Only Adapter → the same adapter (e.g. `vboxnet0`) your Kali/Metasploitable VMs use.
+5. **Give it something to scan:** a bare install has almost nothing open. In Server Manager → Add Roles and Features, install **Web Server (IIS)** (opens 80/443) and/or **File and Storage Services → File Server** (opens SMB 139/445). RDP (3389) is typically enabled by default.
+6. **Find its IP:** `ipconfig` in a Command Prompt/PowerShell on the Server 2019 VM — look for the address on the same `192.168.56.x` range.
+7. **Scan it:** same as any other target — `ping` to confirm reachability from Kali, then enter the IP in NetSecureX's New Scan page.
+
+**Realistic expectation:** Microsoft's evaluation ISO ships current on patches, so it won't have the same volume of Critical CVEs as Metasploitable2/3 out of the box — you'll mainly see IIS/SMB/RDP correctly identified with our existing signatures (CVE-2019-0708 for RDP, CVE-2017-0144 for SMB) flagging *potential* risk rather than confirmed unpatched exploits. That's still a legitimate, useful demo point: it shows the tool correctly fingerprinting a Windows host and applying the right signature set, distinct from the Linux-only findings on the Metasploitable boxes.
+
+⚠️ **Keep this on the host-only network too, and never expose it to the public internet.** Unlike deploying the NetSecureX *application* itself (covered in "Deploying to a Public VPS" below, which is safe because it's just a login-gated web app), publicly exposing a Windows Server — especially one running RDP/SMB, and especially if you intentionally weaken its configuration for demo purposes — gets found and attacked by automated internet scanners within hours, and you are liable for whatever it's used for afterward. If you need remote access to *demonstrate* NetSecureX (e.g., for a remote viva), deploy the app on a VPS as described below and keep all scan *targets* strictly on your local, isolated lab network.
+
 ## Risk Scoring Formula
 ```
 host_risk = Σ (vuln_cvss_score × exposure_weight) / open_port_count
@@ -297,9 +442,6 @@ Unauthorized network scanning may violate computer misuse laws.
 This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details. The license includes an additional notice restricting use to authorized systems only; see the [Legal & Ethical Notice](#legal--ethical-notice) above.
 
 ## Future Scope
-- Live NVD/CVE API integration (currently offline signature DB by design, for
-  demo reliability without network/API-key dependencies)
-- Real Nmap SYN scanning + `-O` OS fingerprinting when run with elevated privileges
-- Scan diffing / trend dashboards across historical scans
 - Email/webhook alerting on new Critical findings
 - Role-based multi-analyst accounts with hashed credentials
+- Displaying live-CVE vs. offline-signature source tags in the report/dashboard (currently tracked internally via `"source"` but not yet surfaced in the UI)

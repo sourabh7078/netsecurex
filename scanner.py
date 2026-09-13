@@ -28,6 +28,8 @@ import struct
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import cve_lookup
+
 # ---------------------------------------------------------------------------
 # Optional real-Nmap integration
 # ---------------------------------------------------------------------------
@@ -321,10 +323,11 @@ def guess_os(ip, open_ports):
 # ---------------------------------------------------------------------------
 
 def match_vulnerabilities(service, version, port):
-    """Match a detected service/version/port against vuln_db.json signatures.
-    Signature match is substring-based on service name and, if present,
-    a version-fragment; this keeps the demo self-contained (no live CVE
-    API dependency) while remaining easy to extend with a real NVD feed."""
+    """Match a detected service/version/port against vuln_db.json signatures,
+    then (if NSX_USE_LIVE_CVE=true) supplement with a live NVD lookup via
+    cve_lookup.py. The offline signature match below is completely
+    self-contained and always runs first, regardless of network
+    availability -- live results are purely additive and deduped by CVE ID."""
     matches = []
     banner_lower = (version or "").lower()
 
@@ -354,7 +357,7 @@ def match_vulnerabilities(service, version, port):
             "severity": "Medium",
         })
 
-    return matches
+    return cve_lookup.merge_with_offline(matches, service, version)
 
 
 # ---------------------------------------------------------------------------

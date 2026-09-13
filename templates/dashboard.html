@@ -50,6 +50,13 @@
   </div>
 </div>
 
+<div class="panel">
+  <h2>Risk Trend Over Time</h2>
+  <p class="trend-subtitle">Network-wide risk score across your most recent completed scans</p>
+  <canvas id="trendChart" height="90"></canvas>
+  <p id="trendEmptyState" class="empty-state" style="display:none;">Complete at least 2 scans to see a trend line.</p>
+</div>
+
 <script>
 fetch("{{ url_for('api_severity_chart') }}")
   .then(r => r.json())
@@ -66,6 +73,51 @@ fetch("{{ url_for('api_severity_chart') }}")
         }]
       },
       options: { plugins: { legend: { position: 'bottom' } } }
+    });
+  });
+
+fetch("{{ url_for('api_risk_trend') }}")
+  .then(r => r.json())
+  .then(trend => {
+    const canvas = document.getElementById('trendChart');
+    if (trend.length < 2) {
+      canvas.style.display = 'none';
+      document.getElementById('trendEmptyState').style.display = 'block';
+      return;
+    }
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: trend.map(t => `#${t.scan_id} · ${t.date}`),
+        datasets: [
+          {
+            label: 'Network Risk Score',
+            data: trend.map(t => t.network_risk_score),
+            borderColor: '#3aa0ff',
+            backgroundColor: 'rgba(58,160,255,0.12)',
+            fill: true,
+            tension: 0.25,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Findings',
+            data: trend.map(t => t.vuln_count),
+            borderColor: '#e6923a',
+            backgroundColor: 'rgba(230,146,58,0.08)',
+            fill: false,
+            tension: 0.25,
+            yAxisID: 'y1',
+          },
+        ],
+      },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom' } },
+        scales: {
+          y: { position: 'left', min: 0, max: 10, title: { display: true, text: 'Risk Score (0-10)' } },
+          y1: { position: 'right', min: 0, grid: { drawOnChartArea: false }, title: { display: true, text: 'Findings' } },
+        },
+      },
     });
   });
 </script>

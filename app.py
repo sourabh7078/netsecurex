@@ -49,7 +49,7 @@ except ImportError:
 
 from models import db, Scan, Host, Port, Vulnerability
 from scanner import run_scan
-from risk_engine import compute_host_risk, compute_scan_summary
+from risk_engine import compute_host_risk, compute_scan_summary, get_risk_trend
 from report_generator import generate_report
 from nmap_output import build_nmap_style_output
 
@@ -594,6 +594,15 @@ def api_severity_chart():
     )
     data = {sev: count for sev, count in rows}
     return jsonify(data)
+
+
+@app.route("/api/charts/trend")
+@login_required
+def api_risk_trend():
+    """Network risk score and finding counts across recent completed scans,
+    oldest first -- powers the dashboard's 'Risk Trend Over Time' chart."""
+    limit = min(int(request.args.get("limit", 20)), 100)
+    return jsonify(get_risk_trend(limit=limit))
 
 
 if __name__ == "__main__":

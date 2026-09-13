@@ -110,6 +110,7 @@ h1 { margin-bottom: 20px; }
 .badge-sev-low, .badge-risk-low { background: rgba(58,194,106,0.15); color: var(--low); }
 
 .empty-state { color: var(--muted); font-style: italic; }
+.trend-subtitle { color: var(--muted); font-size: 0.85em; margin: -6px 0 16px; }
 
 /* Forms */
 .form-panel form { display: flex; flex-direction: column; gap: 10px; max-width: 480px; }
@@ -184,3 +185,72 @@ button:hover { opacity: 0.9; }
   justify-content: center;
   transition: width 0.4s ease;
 }
+
+/* Zenmap-style tabs (Findings / Nmap Output) */
+.zenmap-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 20px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.zenmap-tab {
+  background: var(--panel);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  padding: 9px 20px;
+  border-radius: 8px 8px 0 0;
+  font-size: 0.88em;
+  font-weight: 600;
+  cursor: pointer;
+}
+.zenmap-tab.active {
+  background: var(--accent);
+  color: #05131f;
+  border-color: var(--accent);
+}
+.zenmap-tab-panel {
+  margin-top: -1px;
+}
+
+/* Zenmap "Command:" toolbar strip above the terminal */
+.zenmap-toolbar {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  padding: 10px 16px;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.zenmap-toolbar-label { margin-right: 8px; }
+.zenmap-toolbar code {
+  background: #0c111b;
+  color: var(--accent);
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-family: Consolas, monospace;
+}
+
+/* Nmap/Zenmap-style terminal output pane -- classic white console look,
+   matching Zenmap's syntax-highlighted "Nmap Output" tab */
+.nmap-terminal {
+  background: #ffffff;
+  color: #1a1a1a;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.82em;
+  line-height: 1.55;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 0 0 10px 10px;
+  max-height: 560px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+.nmap-line { white-space: pre-wrap; }
+.nmap-line-open { color: #1a7a1a; font-weight: 700; }
+.nmap-line-filtered { color: #a3790a; font-weight: 700; }
+.nmap-line-closed { color: #888888; }
+.nmap-line-header { color: #1a56db; font-weight: 700; text-decoration: underline; margin-top: 6px; }
+.nmap-line-detail { color: #1a56db; font-weight: 600; }
+.nmap-line-plain { color: #222222; }

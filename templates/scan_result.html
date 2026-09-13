@@ -26,45 +26,71 @@
   <a href="{{ url_for('download_report', scan_id=scan.id) }}" class="btn-inline">📄 Download Full Report (.docx)</a>
 </div>
 
-{% for row in summary.host_rows %}
-<div class="panel">
-  <h2>
-    {{ row.host.ip }} {% if row.host.hostname %}({{ row.host.hostname }}){% endif %}
-    <span class="badge badge-risk-{{ row.risk_category|lower }}">{{ row.risk_category }} — {{ row.risk_score }}/10</span>
-  </h2>
-  <p><strong>OS Guess:</strong> {{ row.host.os_guess }}</p>
-
-  {% if row.host.ports %}
-  <table class="data-table">
-    <thead><tr><th>Port</th><th>Service</th><th>Version/Banner</th><th>CVE</th><th>Severity</th></tr></thead>
-    <tbody>
-      {% for port in row.host.ports %}
-        {% if port.vulnerabilities %}
-          {% for v in port.vulnerabilities %}
-          <tr>
-            <td>{{ port.port_no }}</td>
-            <td>{{ port.service }}</td>
-            <td>{{ port.version or '-' }}</td>
-            <td>{{ v.cve_id }}</td>
-            <td><span class="badge badge-sev-{{ v.severity|lower }}">{{ v.severity }} ({{ v.cvss_score }})</span></td>
-          </tr>
-          {% endfor %}
-        {% else %}
-          <tr>
-            <td>{{ port.port_no }}</td>
-            <td>{{ port.service }}</td>
-            <td>{{ port.version or '-' }}</td>
-            <td>-</td>
-            <td><span class="badge badge-sev-low">None</span></td>
-          </tr>
-        {% endif %}
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="empty-state">No open ports detected on this host.</p>
-  {% endif %}
+<!-- Zenmap-style view tabs -->
+<div class="zenmap-tabs">
+  <button type="button" class="zenmap-tab active" data-target="findings-view" onclick="nsxSwitchTab(this)">Findings</button>
+  <button type="button" class="zenmap-tab" data-target="terminal-view" onclick="nsxSwitchTab(this)">Nmap Output</button>
 </div>
-{% endfor %}
 
+<div id="findings-view" class="zenmap-tab-panel">
+  {% for row in summary.host_rows %}
+  <div class="panel">
+    <h2>
+      {{ row.host.ip }} {% if row.host.hostname %}({{ row.host.hostname }}){% endif %}
+      <span class="badge badge-risk-{{ row.risk_category|lower }}">{{ row.risk_category }} — {{ row.risk_score }}/10</span>
+    </h2>
+    <p><strong>OS Guess:</strong> {{ row.host.os_guess }}</p>
+
+    {% if row.host.ports %}
+    <table class="data-table">
+      <thead><tr><th>Port</th><th>Service</th><th>Version/Banner</th><th>CVE</th><th>Severity</th></tr></thead>
+      <tbody>
+        {% for port in row.host.ports %}
+          {% if port.vulnerabilities %}
+            {% for v in port.vulnerabilities %}
+            <tr>
+              <td>{{ port.port_no }}</td>
+              <td>{{ port.service }}</td>
+              <td>{{ port.version or '-' }}</td>
+              <td>{{ v.cve_id }}</td>
+              <td><span class="badge badge-sev-{{ v.severity|lower }}">{{ v.severity }} ({{ v.cvss_score }})</span></td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td>{{ port.port_no }}</td>
+              <td>{{ port.service }}</td>
+              <td>{{ port.version or '-' }}</td>
+              <td>-</td>
+              <td><span class="badge badge-sev-low">None</span></td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No open ports detected on this host.</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div id="terminal-view" class="zenmap-tab-panel" style="display:none;">
+  <div class="zenmap-toolbar">
+    <span class="zenmap-toolbar-label">Command:</span>
+    <code>netsecurex-scan {{ scan.target_range }}</code>
+  </div>
+  <div class="nmap-terminal">
+    {% for line in terminal_lines %}<div class="nmap-line nmap-line-{{ line.style }}">{{ line.text if line.text else '&nbsp;' | safe }}</div>{% endfor %}
+  </div>
+</div>
+
+<script>
+function nsxSwitchTab(btn) {
+  document.querySelectorAll('.zenmap-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.zenmap-tab-panel').forEach(p => p.style.display = 'none');
+  btn.classList.add('active');
+  document.getElementById(btn.dataset.target).style.display = 'block';
+}
+</script>
 {% endblock %}

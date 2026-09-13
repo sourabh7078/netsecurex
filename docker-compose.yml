@@ -1,0 +1,57 @@
+# NetSecureX - Docker Compose
+#
+# One-command run:
+#   docker compose up --build
+#   -> open http://localhost:5000
+#
+# Set real secrets via a .env file in this same folder (auto-loaded by
+# Docker Compose) rather than editing this file directly:
+#   NSX_SECRET_KEY=some-random-string
+#   NSX_ADMIN_USERNAME=admin
+#   NSX_ADMIN_PASSWORD=change-me
+#   NSX_API_KEY=some-random-string
+#
+# STOP:
+#   docker compose down
+#
+# The instance/ (SQLite DB) and reports/ (generated .docx reports) folders
+# are bind-mounted back to your host, so scan history and reports survive
+# `docker compose down` / rebuilds.
+
+services:
+  netsecurex:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - NSX_SECRET_KEY=${NSX_SECRET_KEY:-change-me-in-prod}
+      - NSX_ADMIN_USERNAME=${NSX_ADMIN_USERNAME:-admin}
+      - NSX_ADMIN_PASSWORD=${NSX_ADMIN_PASSWORD:-admin123}
+      - NSX_API_KEY=${NSX_API_KEY:-}
+      - NSX_DATABASE_URL=${NSX_DATABASE_URL:-}
+      - NSX_USE_NMAP=${NSX_USE_NMAP:-false}
+      - NSX_USE_LIVE_CVE=${NSX_USE_LIVE_CVE:-false}
+    volumes:
+      - ./instance:/app/instance
+      - ./reports:/app/reports
+    restart: unless-stopped
+
+  # Optional: run MySQL in a container instead of SQLite or a separate XAMPP
+  # install. To use it: uncomment this service AND set, in your .env file:
+  #   NSX_DATABASE_URL=mysql+pymysql://root:rootpass@mysql:3306/netsecurex
+  # (note the hostname is "mysql" -- the Compose service name -- not
+  # "localhost", since the app and database run in separate containers.)
+  #
+  # mysql:
+  #   image: mysql:8.0
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=rootpass
+  #     - MYSQL_DATABASE=netsecurex
+  #   volumes:
+  #     - netsecurex_mysql_data:/var/lib/mysql
+  #   ports:
+  #     - "3306:3306"
+  #   restart: unless-stopped
+
+# volumes:
+#   netsecurex_mysql_data:

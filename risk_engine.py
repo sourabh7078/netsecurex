@@ -114,3 +114,36 @@ def compute_scan_summary(scan_id):
     summary["host_rows"].sort(key=lambda r: r["risk_score"], reverse=True)
 
     return summary
+
+
+def get_risk_trend(limit=20):
+    """Returns network-wide risk score and finding counts across the most
+    recent completed scans, oldest first -- feeds the dashboard's "Risk
+    Trend Over Time" chart. Reuses compute_scan_summary() rather than
+    duplicating its aggregation logic, so the trend line always matches
+    what each individual scan's results page shows."""
+    from models import Scan
+
+    scans = (
+        Scan.query.filter_by(status="completed")
+        .order_by(Scan.start_time.desc())
+        .limit(limit)
+        .all()
+    )
+    scans.reverse()  # oldest first, so the chart reads left-to-right chronologically
+
+    trend = []
+    for scan in scans:
+        summary = compute_scan_summary(scan.id)
+        if not summary:
+            continue
+        trend.append({
+            "scan_id": scan.id,
+            "target": scan.target_range,
+            "date": scan.start_time.strftime("%Y-%m-%d %H:%M") if scan.start_time else "",
+            "network_risk_score": summary["network_risk_score"],
+            "vuln_count": summary["vuln_count"],
+            "host_count": summary["host_count"],
+        })
+
+    return trend
