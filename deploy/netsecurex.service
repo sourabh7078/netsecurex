@@ -10,7 +10,7 @@
 #        sudo useradd --system --no-create-home --shell /usr/sbin/nologin netsecurex
 #        sudo chown -R netsecurex:netsecurex /opt/netsecurex
 #   3. Put your production secrets in /opt/netsecurex/.env (NSX_SECRET_KEY,
-#      NSX_ADMIN_USERNAME, NSX_ADMIN_PASSWORD, NSX_API_KEY,
+#      NSX_ADMIN_USERNAME, NSX_ADMIN_PASSWORD,
 #      NSX_SESSION_COOKIE_SECURE=true, etc.) -- see README.md's
 #      "Environment Variables" section for the full list.
 #   4. Copy this file to /etc/systemd/system/netsecurex.service

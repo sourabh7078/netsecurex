@@ -22,7 +22,6 @@ os.environ["NSX_DATABASE_URL"] = f"sqlite:///{_db_path}"
 os.environ["NSX_SECRET_KEY"] = "test-secret-key"
 os.environ["NSX_ADMIN_USERNAME"] = "testadmin"
 os.environ["NSX_ADMIN_PASSWORD"] = "testpass123"
-os.environ["NSX_API_KEY"] = "test-api-key-0000"
 os.environ["NSX_DEBUG"] = "false"
 os.environ["NSX_MAX_LOGIN_ATTEMPTS"] = "3"
 os.environ["NSX_LOGIN_LOCKOUT_SECONDS"] = "300"
@@ -47,11 +46,6 @@ def flask_app():
 @pytest.fixture()
 def client(flask_app):
     return flask_app.test_client()
-
-
-@pytest.fixture()
-def api_headers():
-    return {"X-API-Key": "test-api-key-0000"}
 
 
 @pytest.fixture()

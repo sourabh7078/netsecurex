@@ -2,6 +2,8 @@
 
 ### Intelligent Network Vulnerability Scanner & Security Dashboard
 
+Cybersecurity Specialization
+
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![Flask](https://img.shields.io/badge/Flask-3.x-black)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -30,10 +32,9 @@ automated reporting.
 - **Persistent Scan History** — SQLite (or MySQL/XAMPP) via SQLAlchemy (scans, hosts, ports, vulnerabilities, risk_scores)
 - **Web Dashboard** — login-gated, live scan progress, severity charts (Chart.js), scan history, and a risk-trend-over-time chart across your scan history
 - **Zenmap-Style Terminal Output** — a "Nmap Output" tab on every scan result, rendering findings as classic color-coded Nmap terminal text (green for open ports, orange for filtered, blue for OS/network details) alongside the structured Findings table
-- **REST API** — JSON endpoints (API-key authenticated) to start scans, poll status, fetch results, and download reports programmatically
 - **Automated Report Generation** — one-click `.docx` report: executive summary, methodology, findings, risk matrix, recommendations
-- **Authorization Gate** — every scan requires an explicit confirmation of authorization before it runs, enforced identically in both the web form and the REST API
-- **Automated Test Suite** — pytest coverage for the scanning engine, risk scoring, and REST API
+- **Authorization Gate** — every scan requires an explicit confirmation of authorization before it runs
+- **Automated Test Suite** — pytest coverage for the scanning engine, risk scoring, and dashboard authentication
 - **Docker Support** — one-command `docker compose up` for a fully containerized run
 
 ## Tech Stack
@@ -134,7 +135,6 @@ Real secrets go in a `.env` file in the project root (auto-loaded by Docker Comp
 NSX_SECRET_KEY=some-random-string
 NSX_ADMIN_USERNAME=admin
 NSX_ADMIN_PASSWORD=change-me
-NSX_API_KEY=some-random-string
 ```
 `instance/` (the SQLite DB) and `reports/` (generated `.docx` reports) are bind-mounted back to your host, so scan history and reports survive a rebuild or `docker compose down`. Want MySQL instead of SQLite inside Docker too? `docker-compose.yml` has a commented-out `mysql` service — uncomment it and point `NSX_DATABASE_URL` at it (see the comments in that file for the exact connection string).
 
@@ -145,7 +145,7 @@ docker run -d -p 5000:5000 -e NSX_SECRET_KEY=change-me --name netsecurex netsecu
 ```
 
 ## Testing
-A pytest suite covers the scanning engine, risk scoring, and REST API (`tests/`):
+A pytest suite covers the scanning engine, risk scoring, and dashboard authentication (`tests/`):
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 pytest
@@ -153,7 +153,7 @@ pytest
 - `test_scanner.py` — vulnerability signature matching, OS guessing, service name mapping (no database needed, runs fast)
 - `test_cve_lookup.py` — the optional live-CVE module's safe-by-default behavior, caching, and severity mapping (no network calls made during tests)
 - `test_risk_engine.py` — CVSS-weighted scoring formula and scan summary aggregation, against a disposable temp-file SQLite database
-- `test_api.py` — REST API authentication, input validation (authorization flag, CIDR safety cap), and the brute-force login lockout, using Flask's test client
+- `test_auth.py` — dashboard login flow and the brute-force login lockout, using Flask's test client
 
 Tests use a temporary database file (never your real `instance/netsecurex.db`) and mock the actual network scanning calls, so the full suite runs offline in seconds with no lab VMs required.
 
@@ -170,7 +170,6 @@ All configuration is optional — sensible defaults are used for local demo/viva
 | `NSX_PORT` | `5000` | Port the Flask server listens on. |
 | `NSX_DEBUG` | `false` | Set to `true`/`1` to enable Flask's debug mode (auto-reload, interactive tracebacks). Keep `false` outside local development. |
 | `NSX_MAX_SCAN_HOSTS` | `1024` | Safety cap on how many addresses a single CIDR scan may cover (protects against an accidental `/8`-sized scan). |
-| `NSX_API_KEY` | *(random, regenerated per run)* | REST API authentication key. Set this to keep it stable across restarts. |
 | `NSX_USE_NMAP` | `false` | Set to `true`/`1` to use real Nmap (if installed) instead of the built-in pure-Python scanner. |
 | `NSX_MAX_LOGIN_ATTEMPTS` | `5` | Failed dashboard logins from one IP before it's temporarily locked out. |
 | `NSX_LOGIN_LOCKOUT_SECONDS` | `300` | How long (seconds) a locked-out IP must wait before trying again. |
@@ -235,7 +234,7 @@ For a real "always-on" deployment (rather than just running `python app.py` in a
    sudo useradd --system --no-create-home --shell /usr/sbin/nologin netsecurex
    sudo chown -R netsecurex:netsecurex /opt/netsecurex
    ```
-4. **Set real production secrets** in `/opt/netsecurex/.env` — see the [Environment Variables](#environment-variables) table above. At minimum: `NSX_SECRET_KEY`, `NSX_ADMIN_USERNAME`, `NSX_ADMIN_PASSWORD`, `NSX_API_KEY`, and (after step 6) `NSX_SESSION_COOKIE_SECURE=true`.
+4. **Set real production secrets** in `/opt/netsecurex/.env` — see the [Environment Variables](#environment-variables) table above. At minimum: `NSX_SECRET_KEY`, `NSX_ADMIN_USERNAME`, `NSX_ADMIN_PASSWORD`, and (after step 6) `NSX_SESSION_COOKIE_SECURE=true`.
 5. **Install the systemd service** (keeps the app running, auto-restarts on crash/reboot):
    ```bash
    sudo cp deploy/netsecurex.service /etc/systemd/system/netsecurex.service
@@ -337,40 +336,6 @@ Optionally set `NSX_NVD_API_KEY` (free from [nvd.nist.gov/developers/request-an-
 - Results are cached in memory per service/version pair for `NSX_NVD_CACHE_TTL` seconds (default 1 hour), so scanning the same service across many hosts in one session doesn't re-query NVD each time.
 - **Every failure mode is silent and safe**: disabled, no network, DNS failure, timeout, NVD rate-limiting (HTTP 429), or a malformed response all simply return no additional results — a scan never fails or hangs because the live lookup didn't work. This is deliberate: for a live viva demo, you don't want an internet hiccup breaking your scan.
 - Findings are tagged `"source": "offline-db"` or `"source": "live-nvd"` internally, so the two can be told apart if you extend the report/dashboard to display it.
-
-## REST API
-In addition to the web dashboard, NetSecureX exposes a small JSON REST API for programmatic use (scripts, CI pipelines, other tools) — authenticated separately from the dashboard login via an API key.
-
-**Getting your API key:** set `NSX_API_KEY` yourself, or just start the app and check the console — if you haven't set one, a random key is generated and printed on every startup (it changes each restart unless you set `NSX_API_KEY` explicitly).
-
-All API requests must include the header: `X-API-Key: <your-key>`
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/scans` | Start a new scan. Body: `{"target": "192.168.56.101", "authorized": true}` |
-| `GET` | `/api/v1/scans` | List recent scans (add `?limit=50` to change the default of 20). |
-| `GET` | `/api/v1/scans/<id>` | Full scan detail — hosts, ports, vulnerabilities, risk scores. |
-| `GET` | `/api/v1/scans/<id>/status` | Lightweight polling: `{"status": "running", "progress": 42}` |
-| `GET` | `/api/v1/scans/<id>/report` | Download the generated `.docx` report for a completed scan. |
-
-Example with `curl`:
-```bash
-# Start a scan
-curl -X POST http://localhost:5000/api/v1/scans \
-  -H "X-API-Key: your-key-here" \
-  -H "Content-Type: application/json" \
-  -d '{"target": "192.168.56.101", "authorized": true}'
-
-# Poll status
-curl http://localhost:5000/api/v1/scans/1/status -H "X-API-Key: your-key-here"
-
-# Get full results once completed
-curl http://localhost:5000/api/v1/scans/1 -H "X-API-Key: your-key-here"
-
-# Download the report
-curl http://localhost:5000/api/v1/scans/1/report -H "X-API-Key: your-key-here" -o report.docx
-```
-The same authorization rules apply as the web form: requests without `"authorized": true` are rejected, and CIDR ranges larger than `NSX_MAX_SCAN_HOSTS` are refused with a `400` response.
 
 ## Publishing to GitHub
 If you're pushing this project to your own GitHub repository:

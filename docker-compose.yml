@@ -9,7 +9,6 @@
 #   NSX_SECRET_KEY=some-random-string
 #   NSX_ADMIN_USERNAME=admin
 #   NSX_ADMIN_PASSWORD=change-me
-#   NSX_API_KEY=some-random-string
 #
 # STOP:
 #   docker compose down
@@ -27,7 +26,6 @@ services:
       - NSX_SECRET_KEY=${NSX_SECRET_KEY:-change-me-in-prod}
       - NSX_ADMIN_USERNAME=${NSX_ADMIN_USERNAME:-admin}
       - NSX_ADMIN_PASSWORD=${NSX_ADMIN_PASSWORD:-admin123}
-      - NSX_API_KEY=${NSX_API_KEY:-}
       - NSX_DATABASE_URL=${NSX_DATABASE_URL:-}
       - NSX_USE_NMAP=${NSX_USE_NMAP:-false}
       - NSX_USE_LIVE_CVE=${NSX_USE_LIVE_CVE:-false}
