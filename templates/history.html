@@ -5,6 +5,7 @@
 
 <div class="panel">
   {% if scans %}
+  <div class="table-scroll">
   <table class="data-table">
     <thead>
       <tr><th>ID</th><th>Target</th><th>Status</th><th>Started</th><th>Duration</th><th>Hosts</th><th></th></tr>
@@ -23,6 +24,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="empty-state">No scans recorded yet.</p>
   {% endif %}

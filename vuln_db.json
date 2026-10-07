@@ -250,5 +250,140 @@
     "cvss_score": 4.3,
     "severity": "Low",
     "description": "POP3 service exposed without TLS wrapper (use POP3S / port 995 instead)."
+  },
+  {
+    "service": "redis",
+    "port": 6379,
+    "version_contains": "",
+    "cve_id": "CVE-2022-0543",
+    "cvss_score": 10.0,
+    "severity": "Critical",
+    "description": "Redis exposed without authentication is a well-known cloud misconfiguration; an unauthenticated instance allows full read/write access and, on Debian-based builds, a Lua sandbox escape (CVE-2022-0543) enabling remote code execution."
+  },
+  {
+    "service": "mongodb",
+    "port": 27017,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 9.1,
+    "severity": "Critical",
+    "description": "MongoDB exposed without authentication (the historical default) allows any network client to read, modify, or delete all data -- one of the most common causes of real-world data breaches."
+  },
+  {
+    "service": "elasticsearch",
+    "port": 9200,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 9.1,
+    "severity": "Critical",
+    "description": "Elasticsearch exposed without authentication allows full read/write access to all indexed data via its REST API, and has been a frequent source of large-scale data leaks."
+  },
+  {
+    "service": "memcached",
+    "port": 11211,
+    "version_contains": "",
+    "cve_id": "CVE-2018-1000115",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "Memcached exposed to the network (especially over UDP) can be abused for massive DDoS reflection/amplification attacks and may leak cached application data."
+  },
+  {
+    "service": "docker-api",
+    "port": 2375,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 10.0,
+    "severity": "Critical",
+    "description": "An unauthenticated Docker Engine API (plain HTTP, no TLS) grants full control of the host: an attacker can launch a privileged container mounting the host filesystem, resulting in complete host compromise."
+  },
+  {
+    "service": "http-proxy",
+    "port": 8080,
+    "version_contains": "jenkins",
+    "cve_id": "CVE-2024-23897",
+    "cvss_score": 9.8,
+    "severity": "Critical",
+    "description": "Jenkins' built-in CLI command parser is vulnerable to an arbitrary file-read flaw that can be leveraged for remote code execution when the CLI endpoint is reachable without authentication."
+  },
+  {
+    "service": "http",
+    "port": 80,
+    "version_contains": "phpmyadmin",
+    "cve_id": "N/A",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "An exposed phpMyAdmin interface, especially with default or weak credentials, grants direct access to underlying databases and, via features like LOAD_FILE or log poisoning, can lead to remote code execution."
+  },
+  {
+    "service": "http",
+    "port": 3000,
+    "version_contains": "grafana",
+    "cve_id": "CVE-2021-43798",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "Grafana versions affected by the plugin path-traversal vulnerability allow unauthenticated arbitrary file read from the server's filesystem."
+  },
+  {
+    "service": "http",
+    "port": 9090,
+    "version_contains": "prometheus",
+    "cve_id": "N/A",
+    "cvss_score": 5.3,
+    "severity": "Medium",
+    "description": "An exposed Prometheus web UI/API with no authentication can leak internal service topology, metrics, and configuration details useful for reconnaissance."
+  },
+  {
+    "service": "snmp",
+    "port": 161,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "SNMP responding with the default 'public' community string allows unauthenticated read (and sometimes write) access to detailed device configuration and network topology information."
+  },
+  {
+    "service": "https",
+    "port": 443,
+    "version_contains": "openssl/1.0.1",
+    "cve_id": "CVE-2014-0160",
+    "cvss_score": 7.5,
+    "severity": "High",
+    "description": "Heartbleed: affected OpenSSL 1.0.1 branches leak up to 64KB of process memory per request, potentially exposing private keys, session tokens, and credentials."
+  },
+  {
+    "service": "http",
+    "port": 80,
+    "version_contains": "apache/2.4.6",
+    "cve_id": "CVE-2014-6271",
+    "cvss_score": 9.8,
+    "severity": "Critical",
+    "description": "Shellshock: a crafted environment variable processed by a vulnerable Bash via CGI can achieve remote code execution on affected Apache/CGI configurations."
+  },
+  {
+    "service": "http",
+    "port": 80,
+    "version_contains": "wordpress",
+    "cve_id": "N/A",
+    "cvss_score": 5.3,
+    "severity": "Medium",
+    "description": "WordPress's XML-RPC endpoint (xmlrpc.php), when enabled, is commonly abused for credential brute-forcing (via system.multicall amplification) and pingback-based SSRF/DDoS."
+  },
+  {
+    "service": "git",
+    "port": 9418,
+    "version_contains": "",
+    "cve_id": "N/A",
+    "cvss_score": 5.3,
+    "severity": "Medium",
+    "description": "An exposed .git directory or git daemon protocol port can allow an attacker to reconstruct full source history, potentially recovering hardcoded credentials or proprietary code."
+  },
+  {
+    "service": "couchdb",
+    "port": 5984,
+    "version_contains": "",
+    "cve_id": "CVE-2017-12635",
+    "cvss_score": 8.8,
+    "severity": "High",
+    "description": "Apache CouchDB's Erlang-based JSON parser discrepancy allows an authentication bypass that can be chained to CVE-2017-12636 for remote code execution."
   }
 ]

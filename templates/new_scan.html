@@ -4,7 +4,7 @@
 <h1>Start a New Scan</h1>
 
 <div class="panel form-panel">
-  <form method="POST">
+  <form method="POST" id="newScanForm">
     <label>Target (IP, hostname, or CIDR range e.g. 192.168.56.0/24)</label>
     <input type="text" name="target" placeholder="192.168.56.101" required>
 
@@ -16,7 +16,7 @@
       </label>
     </div>
 
-    <button type="submit">Start Scan</button>
+    <button type="submit" id="startScanBtn">Start Scan</button>
   </form>
 
   <div class="legal-note">
@@ -25,4 +25,15 @@
     environments only (e.g. Metasploitable2, your own VMs).
   </div>
 </div>
+
+<script>
+  // Immediate visual feedback + prevents accidental double-submission while
+  // the server is creating the scan record and kicking off the background thread.
+  document.getElementById('newScanForm').addEventListener('submit', function() {
+    const btn = document.getElementById('startScanBtn');
+    btn.classList.add('loading');
+    btn.textContent = 'Starting scan';
+    btn.disabled = true;
+  });
+</script>
 {% endblock %}

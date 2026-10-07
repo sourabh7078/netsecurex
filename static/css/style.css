@@ -30,6 +30,16 @@ body {
 }
 
 .nav-brand { font-weight: 700; font-size: 1.2em; }
+.nav-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1.3em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
 .nav-links a {
   color: var(--muted);
   text-decoration: none;
@@ -93,6 +103,7 @@ h1 { margin-bottom: 20px; }
   font-size: 0.92em;
 }
 .data-table th { color: var(--muted); font-weight: 600; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 .badge {
   padding: 3px 10px;
@@ -254,3 +265,70 @@ button:hover { opacity: 0.9; }
 .nmap-line-header { color: #1a56db; font-weight: 700; text-decoration: underline; margin-top: 6px; }
 .nmap-line-detail { color: #1a56db; font-weight: 600; }
 .nmap-line-plain { color: #222222; }
+
+/* Button loading state (used on scan submission for immediate feedback) */
+button.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+  position: relative;
+}
+button.loading::after {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+  border: 2px solid rgba(5,19,31,0.4);
+  border-top-color: #05131f;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: nsx-spin 0.7s linear infinite;
+}
+@keyframes nsx-spin { to { transform: rotate(360deg); } }
+
+/* ===========================================================================
+   Responsive breakpoints
+   =========================================================================== */
+
+/* Tablet: 2 stat-cards per row instead of 4, single-column content grid */
+@media (max-width: 900px) {
+  .stat-cards { grid-template-columns: repeat(2, 1fr); }
+  .grid-2 { grid-template-columns: 1fr; }
+}
+
+/* Phone: stacked nav with hamburger toggle, single-column everything,
+   full-width forms, scrollable tables so nothing overflows the viewport */
+@media (max-width: 640px) {
+  .container { padding: 16px; }
+
+  .navbar { flex-wrap: wrap; padding: 12px 16px; }
+  .nav-toggle { display: inline-block; }
+  .nav-links {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    margin-top: 12px;
+  }
+  .nav-links.open { display: flex; }
+  .nav-links a {
+    margin-left: 0;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .stat-cards { grid-template-columns: 1fr; }
+  .stat-card { padding: 16px; }
+
+  h1 { font-size: 1.4em; }
+
+  .panel { padding: 14px; }
+
+  .form-panel form { max-width: 100%; }
+
+  .zenmap-tabs { flex-wrap: wrap; }
+  .zenmap-tab { flex: 1; text-align: center; padding: 9px 10px; }
+
+  .login-box { margin: 40px auto; padding: 24px; max-width: 90%; }
+
+  .nmap-terminal { font-size: 0.75em; padding: 12px; }
+}

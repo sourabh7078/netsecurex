@@ -30,6 +30,7 @@
   <div class="panel">
     <h2>Recent Scans</h2>
     {% if scans %}
+    <div class="table-scroll">
     <table class="data-table">
       <thead><tr><th>ID</th><th>Target</th><th>Status</th><th>Started</th><th></th></tr></thead>
       <tbody>
@@ -44,6 +45,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="empty-state">No scans yet. Start your first scan.</p>
     {% endif %}

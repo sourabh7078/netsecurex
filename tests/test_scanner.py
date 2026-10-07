@@ -98,8 +98,85 @@ class TestServiceMap:
         assert scanner.SERVICE_MAP[1524] == "ingreslock"
         assert scanner.SERVICE_MAP[3632] == "distccd"
 
+    def test_new_service_ports_are_named(self):
+        assert scanner.SERVICE_MAP[6379] == "redis"
+        assert scanner.SERVICE_MAP[27017] == "mongodb"
+        assert scanner.SERVICE_MAP[9200] == "elasticsearch"
+        assert scanner.SERVICE_MAP[2375] == "docker-api"
+        assert scanner.SERVICE_MAP[5984] == "couchdb"
+
     def test_common_ports_list_matches_service_map_coverage(self):
         # Every port we scan by default should have a human-readable name,
         # or the dashboard will show "unknown" for well-known services.
         unnamed = [p for p in scanner.COMMON_PORTS if p not in scanner.SERVICE_MAP]
         assert unnamed == [], f"Ports with no SERVICE_MAP entry: {unnamed}"
+
+
+class TestNewVulnSignatures:
+    def test_redis_unauthenticated_critical(self):
+        matches = scanner.match_vulnerabilities("redis", "", 6379)
+        assert any(m["severity"] == "Critical" for m in matches)
+
+    def test_docker_api_exposed_critical(self):
+        matches = scanner.match_vulnerabilities("docker-api", "", 2375)
+        assert any(m["severity"] == "Critical" for m in matches)
+
+    def test_jenkins_matches_on_http_proxy_service_with_version(self):
+        # Jenkins commonly runs on 8080, which SERVICE_MAP names "http-proxy" --
+        # the signature must target that service name, not a bespoke "jenkins" one.
+        matches = scanner.match_vulnerabilities("http-proxy", "Jenkins 2.440", 8080)
+        assert any(m["cve_id"] == "CVE-2024-23897" for m in matches)
+
+    def test_mongodb_no_auth_flagged(self):
+        matches = scanner.match_vulnerabilities("mongodb", "", 27017)
+        assert len(matches) >= 1
+
+
+class TestRunScanConcurrency:
+    """Covers the multi-host parallel scanning path added for CIDR ranges
+    (see scanner.run_scan). Network calls are mocked so these run offline."""
+
+    def test_single_host_uses_fine_grained_progress(self, monkeypatch):
+        progress_calls = []
+        monkeypatch.setattr(scanner, "discover_hosts", lambda target, progress_cb=None: ["10.0.0.1"])
+        monkeypatch.setattr(scanner, "scan_ports", lambda ip, ports=None, progress_cb=None,
+                             progress_offset=30, progress_span=60: [])
+        monkeypatch.setattr(scanner, "guess_os", lambda ip, ports: "Unknown")
+
+        result = scanner.run_scan("10.0.0.1", progress_cb=progress_calls.append)
+
+        assert len(result["hosts"]) == 1
+        assert result["hosts"][0]["ip"] == "10.0.0.1"
+        assert 100 in progress_calls
+
+    def test_multi_host_scans_all_and_sorts_by_ip(self, monkeypatch):
+        monkeypatch.setattr(scanner, "discover_hosts",
+                             lambda target, progress_cb=None: ["10.0.0.3", "10.0.0.1", "10.0.0.2"])
+        monkeypatch.setattr(scanner, "_scan_one_host",
+                             lambda ip, ports: {"ip": ip, "hostname": "", "os_guess": "Unknown", "ports": []})
+
+        result = scanner.run_scan("10.0.0.0/24")
+
+        ips = [h["ip"] for h in result["hosts"]]
+        assert ips == ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+        assert len(result["hosts"]) == 3
+
+    def test_multi_host_reports_progress_to_completion(self, monkeypatch):
+        progress_calls = []
+        monkeypatch.setattr(scanner, "discover_hosts",
+                             lambda target, progress_cb=None: ["10.0.0.1", "10.0.0.2"])
+        monkeypatch.setattr(scanner, "_scan_one_host",
+                             lambda ip, ports: {"ip": ip, "hostname": "", "os_guess": "Unknown", "ports": []})
+
+        scanner.run_scan("10.0.0.0/30", progress_cb=progress_calls.append)
+
+        assert 100 in progress_calls
+
+    def test_no_live_hosts_returns_empty_and_completes_progress(self, monkeypatch):
+        progress_calls = []
+        monkeypatch.setattr(scanner, "discover_hosts", lambda target, progress_cb=None: [])
+
+        result = scanner.run_scan("10.0.0.0/24", progress_cb=progress_calls.append)
+
+        assert result["hosts"] == []
+        assert 100 in progress_calls

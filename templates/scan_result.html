@@ -42,6 +42,7 @@
     <p><strong>OS Guess:</strong> {{ row.host.os_guess }}</p>
 
     {% if row.host.ports %}
+    <div class="table-scroll">
     <table class="data-table">
       <thead><tr><th>Port</th><th>Service</th><th>Version/Banner</th><th>CVE</th><th>Severity</th></tr></thead>
       <tbody>
@@ -68,6 +69,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="empty-state">No open ports detected on this host.</p>
     {% endif %}

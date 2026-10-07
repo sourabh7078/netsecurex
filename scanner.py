@@ -66,19 +66,37 @@ VULN_DB_PATH = os.path.join(BASE_DIR, "vuln_db.json")
 COMMON_PORTS = [
     21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143,
     443, 445, 512, 513, 514, 993, 995, 1099, 1524, 1723,
-    2049, 3306, 3389, 3632, 5432, 5900, 6000, 6667, 6697,
-    8009, 8080, 8180, 8443,
+    2049, 3000, 3306, 3389, 3632, 5432, 5900, 5984, 6000,
+    6379, 6667, 6697, 8009, 8080, 8180, 8443, 9090, 9200,
+    9418, 11211, 27017, 2375,
 ]
 # The 512/513/514/1099/1524/2049/3632/5432/6000/6667/6697/8009/8180 additions
 # above cover Metasploitable2's full known-vulnerable service set (rexec/
 # rlogin/rsh, Java RMI, the "ingreslock" root-shell backdoor, NFS, distccd,
 # PostgreSQL, X11, UnrealIRCd, AJP, and the Tomcat manager) so a demo scan
 # against it surfaces the classic teaching CVEs out of the box.
+#
+# 3000/5984/6379/9090/9200/9418/11211/27017/2375 extend coverage to common
+# modern misconfigurations seen in real-world exposures: Grafana, CouchDB,
+# Redis, Prometheus, Elasticsearch, the git daemon protocol, Memcached,
+# MongoDB, and the unauthenticated Docker Engine API.
+#
+# Note: SNMP (default port 161) is UDP-based; this scanner is TCP-only, so
+# it isn't included here even though vuln_db.json carries an SNMP signature
+# for documentation/extensibility -- UDP scanning is tracked as future scope.
 
-CONNECT_TIMEOUT = 0.6
-BANNER_TIMEOUT = 1.0
-MAX_WORKERS_HOSTS = 50
-MAX_WORKERS_PORTS = 100
+CONNECT_TIMEOUT = float(os.environ.get("NSX_CONNECT_TIMEOUT", "0.6"))
+BANNER_TIMEOUT = float(os.environ.get("NSX_BANNER_TIMEOUT", "1.0"))
+MAX_WORKERS_HOSTS = int(os.environ.get("NSX_MAX_WORKERS_HOSTS", "50"))
+MAX_WORKERS_PORTS = int(os.environ.get("NSX_MAX_WORKERS_PORTS", "100"))
+# How many hosts to port-scan CONCURRENTLY when a target expands to multiple
+# live hosts (a CIDR range). Each of those concurrent host-scans still uses
+# its own internal MAX_WORKERS_PORTS thread pool for that host's ports, so
+# total in-flight sockets can reach roughly MAX_CONCURRENT_HOSTS x
+# MAX_WORKERS_PORTS -- tune both down together on a resource-constrained
+# machine. A single-target scan (one IP, no "/") always uses the original
+# fine-grained per-port progress path regardless of this setting.
+MAX_CONCURRENT_HOSTS = int(os.environ.get("NSX_MAX_CONCURRENT_HOSTS", "8"))
 
 
 def _load_vuln_db():
@@ -171,10 +189,13 @@ SERVICE_MAP = {
     80: "http", 110: "pop3", 111: "rpcbind", 135: "msrpc", 139: "netbios-ssn",
     143: "imap", 443: "https", 445: "microsoft-ds", 512: "exec", 513: "login",
     514: "shell", 993: "imaps", 995: "pop3s", 1099: "java-rmi",
-    1524: "ingreslock", 1723: "pptp", 2049: "nfs", 3306: "mysql",
-    3389: "rdp", 3632: "distccd", 5432: "postgresql", 5900: "vnc",
-    6000: "X11", 6667: "irc", 6697: "ircs", 8009: "ajp13",
+    1524: "ingreslock", 1723: "pptp", 2049: "nfs", 2375: "docker-api",
+    3000: "http", 3306: "mysql", 3389: "rdp", 3632: "distccd",
+    5432: "postgresql", 5900: "vnc", 5984: "couchdb", 6000: "X11",
+    6379: "redis", 6667: "irc", 6697: "ircs", 8009: "ajp13",
     8080: "http-proxy", 8180: "http-tomcat", 8443: "https-alt",
+    9090: "http", 9200: "elasticsearch", 9418: "git", 11211: "memcached",
+    27017: "mongodb",
 }
 
 
@@ -364,8 +385,46 @@ def match_vulnerabilities(service, version, port):
 # Orchestration
 # ---------------------------------------------------------------------------
 
+def _scan_one_host(ip, ports):
+    """Scan a single host (Nmap-if-enabled, else pure-Python fallback) and
+    return its full result dict, including vulnerability matches. Used by
+    both the single-target path and the concurrent multi-host path below --
+    no progress_cb here, since per-port progress isn't meaningful once
+    several hosts are being scanned in parallel."""
+    open_ports, os_guess = None, None
+
+    if USE_NMAP:
+        try:
+            nmap_result = nmap_scan_host(ip, ports=ports)
+            open_ports = nmap_result["ports"]
+            os_guess = nmap_result["os_guess"]
+        except Exception:
+            open_ports, os_guess = None, None
+
+    if open_ports is None:
+        open_ports = scan_ports(ip, ports=ports)
+        os_guess = guess_os(ip, open_ports)
+
+    for p in open_ports:
+        p["vulnerabilities"] = match_vulnerabilities(p["service"], p.get("version", ""), p["port"])
+
+    try:
+        hostname = socket.gethostbyaddr(ip)[0]
+    except (socket.herror, socket.gaierror):
+        hostname = ""
+
+    return {"ip": ip, "hostname": hostname, "os_guess": os_guess, "ports": open_ports}
+
+
 def run_scan(target, ports=None, progress_cb=None):
-    """Full pipeline: discovery -> port scan -> banner -> OS guess -> vuln match."""
+    """Full pipeline: discovery -> port scan -> banner -> OS guess -> vuln match.
+
+    A single-target scan (one IP/hostname) uses the original sequential path
+    with fine-grained per-port progress reporting. A CIDR range that expands
+    to multiple live hosts instead scans up to MAX_CONCURRENT_HOSTS of them
+    in parallel -- much faster on larger networks -- reporting progress per
+    completed host instead of per port.
+    """
     def cb(pct):
         if progress_cb:
             progress_cb(min(pct, 99))
@@ -378,11 +437,10 @@ def run_scan(target, ports=None, progress_cb=None):
             progress_cb(100)
         return results
 
-    per_host_span = 60 / max(len(live_hosts), 1)
-
-    for idx, ip in enumerate(live_hosts):
-        offset = 30 + idx * per_host_span
-
+    if len(live_hosts) == 1:
+        # Common case (a single IP/hostname target): keep the original
+        # fine-grained, per-port progress reporting for a smooth progress bar.
+        ip = live_hosts[0]
         open_ports, os_guess = None, None
 
         if USE_NMAP:
@@ -390,19 +448,12 @@ def run_scan(target, ports=None, progress_cb=None):
                 nmap_result = nmap_scan_host(ip, ports=ports)
                 open_ports = nmap_result["ports"]
                 os_guess = nmap_result["os_guess"]
-                if progress_cb:
-                    cb(int(offset + per_host_span))
+                cb(90)
             except Exception:
-                # Real Nmap failed for this host (not installed correctly,
-                # permissions, host unreachable via Nmap, etc.) -- fall back
-                # to the pure-Python scanner below rather than losing the host.
                 open_ports, os_guess = None, None
 
         if open_ports is None:
-            open_ports = scan_ports(
-                ip, ports=ports, progress_cb=cb,
-                progress_offset=int(offset), progress_span=int(per_host_span),
-            )
+            open_ports = scan_ports(ip, ports=ports, progress_cb=cb, progress_offset=30, progress_span=60)
             os_guess = guess_os(ip, open_ports)
 
         for p in open_ports:
@@ -413,12 +464,32 @@ def run_scan(target, ports=None, progress_cb=None):
         except (socket.herror, socket.gaierror):
             hostname = ""
 
-        results["hosts"].append({
-            "ip": ip,
-            "hostname": hostname,
-            "os_guess": os_guess,
-            "ports": open_ports,
-        })
+        results["hosts"].append({"ip": ip, "hostname": hostname, "os_guess": os_guess, "ports": open_ports})
+
+    else:
+        # Multiple live hosts (a CIDR range): scan them concurrently rather
+        # than one at a time, bounded by MAX_CONCURRENT_HOSTS so a large /22
+        # doesn't try to open thousands of sockets at once.
+        total = len(live_hosts)
+        completed = 0
+        lock = threading.Lock()
+
+        def _task(ip):
+            return _scan_one_host(ip, ports)
+
+        with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_HOSTS, total)) as executor:
+            future_to_ip = {executor.submit(_task, ip): ip for ip in live_hosts}
+            for future in as_completed(future_to_ip):
+                host_result = future.result()
+                results["hosts"].append(host_result)
+                with lock:
+                    completed += 1
+                    cb(30 + int((completed / total) * 60))
+
+        # Concurrent completion order is nondeterministic -- sort back into
+        # numeric IP order so results display consistently regardless of
+        # which host happened to finish first.
+        results["hosts"].sort(key=lambda h: socket.inet_aton(h["ip"]))
 
     if progress_cb:
         progress_cb(100)

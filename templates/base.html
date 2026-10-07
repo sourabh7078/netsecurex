@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}NetSecureX{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -10,13 +11,19 @@
   {% if session.logged_in %}
   <nav class="navbar">
     <div class="nav-brand">🛡️ NetSecureX</div>
-    <div class="nav-links">
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
+    <div class="nav-links" id="navLinks">
       <a href="{{ url_for('dashboard') }}">Dashboard</a>
       <a href="{{ url_for('new_scan') }}">New Scan</a>
       <a href="{{ url_for('history') }}">History</a>
       <a href="{{ url_for('logout') }}" class="nav-logout">Logout ({{ session.username }})</a>
     </div>
   </nav>
+  <script>
+    document.getElementById('navToggle').addEventListener('click', function() {
+      document.getElementById('navLinks').classList.toggle('open');
+    });
+  </script>
   {% endif %}
 
   <main class="container">
