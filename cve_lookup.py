@@ -162,24 +162,68 @@ def lookup_live_cves(service, version):
     return results
 
 
+# ----------------------------------------------------------------- local NVD feed
+# A JSON file of CVE records produced by tools/import_nvd_feed.py. It lets a
+# deployment use NVD data without internet access at scan time.
+#   NSX_NVD_FEED_PATH   path to the JSON file (optional)
+_feed = []
+
+
+def set_feed(records):
+    """Replace the in-memory feed. Each record: cve_id, cvss_score, severity, description."""
+    global _feed
+    _feed = [dict(r) for r in records]
+    return len(_feed)
+
+
+def load_feed(path):
+    with open(path, encoding="utf-8") as fh:
+        return set_feed(json.load(fh))
+
+
+def feed_matches(service, version):
+    """CVE records from the local feed whose description mentions every word of the
+    version string. Returns at most MAX_RESULTS records tagged source "nvd-feed"."""
+    words = [w for w in (version or "").lower().split() if len(w) > 1]
+    if not words or not _feed:
+        return []
+    matches = []
+    for record in _feed:
+        text = record.get("description", "").lower()
+        if all(w in text for w in words):
+            matches.append({
+                "cve_id": record["cve_id"],
+                "cvss_score": float(record.get("cvss_score", 0.0)),
+                "description": record.get("description", "")[:400],
+                "severity": record.get("severity", _score_to_severity(float(record.get("cvss_score", 0.0)))),
+                "source": "nvd-feed",
+            })
+            if len(matches) >= MAX_RESULTS:
+                break
+    return matches
+
+
+if os.environ.get("NSX_NVD_FEED_PATH"):
+    try:
+        load_feed(os.environ["NSX_NVD_FEED_PATH"])
+    except (OSError, ValueError):
+        pass
+
+
 def merge_with_offline(offline_matches, service, version):
-    """Combine offline signature matches with live NVD results, deduped by
-    CVE ID (offline entries win on conflict, since they're curated for this
-    project's demo targets). Offline-only entries are tagged "source":
-    "offline-db" for consistency with the live results' tagging."""
+    """Combine signature matches with local-feed and live NVD results. Offline
+    signatures always come first and win on a duplicate CVE identifier."""
     for m in offline_matches:
         m.setdefault("source", "offline-db")
 
-    if not USE_LIVE_CVE:
-        return offline_matches
-
-    live_matches = lookup_live_cves(service, version)
+    combined = list(offline_matches)
     known_ids = {m["cve_id"] for m in offline_matches if m.get("cve_id") not in (None, "N/A")}
 
-    combined = list(offline_matches)
-    for lv in live_matches:
-        if lv["cve_id"] not in known_ids:
-            combined.append(lv)
-            known_ids.add(lv["cve_id"])
-
+    extra = list(feed_matches(service, version))
+    if USE_LIVE_CVE:
+        extra += lookup_live_cves(service, version)
+    for item in extra:
+        if item["cve_id"] not in known_ids:
+            combined.append(item)
+            known_ids.add(item["cve_id"])
     return combined

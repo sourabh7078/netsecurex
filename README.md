@@ -33,7 +33,14 @@ automated reporting.
 - **Zenmap-Style Terminal Output** — a "Nmap Output" tab on every scan result, rendering findings as classic color-coded Nmap terminal text (green for open ports, orange for filtered, blue for OS/network details) alongside the structured Findings table
 - **Automated Report Generation** — one-click `.docx` report: executive summary, methodology, findings, risk matrix, recommendations
 - **Authorization Gate** — every scan requires an explicit confirmation of authorization before it runs
-- **Automated Test Suite** — pytest coverage for the scanning engine, risk scoring, and dashboard authentication
+- **User Accounts and Roles** — three roles: *viewer* (sees scans and reports), *analyst* (also starts scans and schedules), *admin* (also manages accounts). The last active administrator cannot be demoted or disabled.
+- **Shared Login Lockout** — failed-login counters live in the database, so every worker process applies the same lockout.
+- **Scheduled Scans** — run a target every N minutes (15 minutes to 7 days). Each run needs the same authorization confirmation as a manual scan. A schedule whose previous run is still going is postponed rather than overlapped.
+- **Change Reports** — for any scan after the first of its target, a page lists new and closed hosts and ports, new and resolved findings, and risk-score changes.
+- **Alerts for New Critical Findings** — when a scan finds a Critical issue that the previous scan of the same target did not, a webhook POST and/or an e-mail is sent. Delivery failures are logged and never fail the scan.
+- **UDP Probing (SNMP)** — UDP 161 is probed with a version-1 SNMP GetRequest. A reply marks the service as open and shows its system description. Only SNMP is probed; other UDP services are not detected.
+- **Finding Source Tags** — each finding is labelled *offline* (curated signature) or *live NVD*, in the results page, the change report, and the Word report.
+- **Automated Test Suite** — 136 pytest tests covering scanning, risk scoring, lockout, roles, schedules, alerts, change detection, SNMP encoding, and the scan flow
 - **Docker Support** — one-command `docker compose up` for a fully containerized run
 
 ## Tech Stack
@@ -54,6 +61,9 @@ netsecurex/
 ├── risk_engine.py            # CVSS-weighted risk scoring + trend aggregation
 ├── report_generator.py        # python-docx report builder
 ├── nmap_output.py              # Zenmap-style terminal output formatter
+├── udp_probe.py                # SNMP probe over UDP 161
+├── changes.py                  # Change detection between scans
+├── alerts.py                   # Webhook and e-mail alerts for new Critical findings
 ├── cve_lookup.py                # Optional live NVD/CVE lookup
 ├── vuln_db.json               # Offline vulnerability signature database
 ├── requirements.txt
@@ -153,6 +163,12 @@ pytest
 - `test_cve_lookup.py` — the optional live-CVE module's safe-by-default behavior, caching, and severity mapping (no network calls made during tests)
 - `test_risk_engine.py` — CVSS-weighted scoring formula and scan summary aggregation, against a disposable temp-file SQLite database
 - `test_auth.py` — dashboard login flow and the brute-force login lockout, using Flask's test client
+- `test_accounts.py` — roles, account management, last-admin protection, database-backed lockout
+- `test_schedules.py` — due and future schedules, disabled schedules, the no-overlap rule, authorization and interval limits
+- `test_scan_flow.py` — source tags stored per finding, alerts on first and repeat scans, failing alerts that do not fail a scan, the change page
+- `test_changes.py` — diff logic and new-Critical detection on plain snapshots
+- `test_alerts.py` — payload contents, webhook and e-mail delivery with mocked transports
+- `test_udp.py` — SNMP request bytes checked against a reference packet; response parsing; timeout and reset handling
 
 Tests use a temporary database file (never your real `instance/netsecurex.db`) and mock the actual network scanning calls, so the full suite runs offline in seconds with no lab VMs required.
 
@@ -164,7 +180,7 @@ All configuration is optional — sensible defaults are used for local demo/viva
 | `NSX_SECRET_KEY` | *(insecure dev key)* | Flask session signing key. **Set this to a random value** before exposing the app beyond localhost. |
 | `NSX_DATABASE_URL` | local SQLite file | SQLAlchemy connection URI. Set to a MySQL URI to use XAMPP (see below). |
 | `NSX_ADMIN_USERNAME` | `admin` | Dashboard login username. |
-| `NSX_ADMIN_PASSWORD` | `admin123` | Dashboard login password (hashed in memory at startup, never stored in plaintext). |
+| `NSX_ADMIN_PASSWORD` | `admin123` | Password for the first administrator, created only when the users table is empty. Stored as a salted hash. |
 | `NSX_HOST` | `0.0.0.0` | Interface the Flask server binds to. |
 | `NSX_PORT` | `5000` | Port the Flask server listens on. |
 | `NSX_DEBUG` | `false` | Set to `true`/`1` to enable Flask's debug mode (auto-reload, interactive tracebacks). Keep `false` outside local development. |
@@ -178,6 +194,19 @@ All configuration is optional — sensible defaults are used for local demo/viva
 | `NSX_NVD_API_KEY` | *(none)* | Optional. Free from nvd.nist.gov — raises the NVD rate limit from 5 to 50 requests/30s. |
 | `NSX_NVD_TIMEOUT` | `5` | Per-request timeout (seconds) for NVD API calls. |
 | `NSX_NVD_CACHE_TTL` | `3600` | How long (seconds) a live CVE lookup is cached before re-querying NVD. |
+| `NSX_ENABLE_SCHEDULER` | `true` | Run scheduled scans in the background. Set to `false` to disable. |
+| `NSX_UDP_SCAN` | `true` | Probe UDP services on each live host (see `NSX_UDP_PROBES`). |
+| `NSX_UDP_PROBES` | `snmp,dns,ntp` | Which UDP probes run: SNMP (161), DNS version query (53), NTP (123). |
+| `NSX_CSRF` | `true` | Require a CSRF token on every form submission. Keep on outside tests. |
+| `NSX_NVD_FEED_PATH` | *(none)* | Path to a local NVD feed JSON file (see "Offline NVD Feed" below). |
+| `NSX_SNMP_COMMUNITY` | `public` | Community string used for the SNMP probe. |
+| `NSX_UDP_TIMEOUT` | `1.0` | Seconds to wait for an SNMP reply. |
+| `NSX_ALERT_WEBHOOK_URL` | *(none)* | URL that receives a JSON POST when new Critical findings appear. |
+| `NSX_ALERT_EMAIL_TO` | *(none)* | Recipient for e-mail alerts. Needs `NSX_SMTP_HOST`. |
+| `NSX_SMTP_HOST` / `NSX_SMTP_PORT` | *(none)* / `587` | SMTP server for e-mail alerts. |
+| `NSX_SMTP_USER` / `NSX_SMTP_PASSWORD` | *(none)* | Optional SMTP login. |
+| `NSX_SMTP_FROM` | user or `netsecurex@localhost` | Sender address for e-mail alerts. |
+| `NSX_SMTP_STARTTLS` | `true` | Use STARTTLS when connecting to the SMTP server. |
 | `NSX_CONNECT_TIMEOUT` | `0.6` | Per-port TCP connect timeout (seconds). Lower for faster scans on a reliable local network; raise on a flaky/high-latency one. |
 | `NSX_BANNER_TIMEOUT` | `1.0` | Timeout (seconds) for reading a service banner after connecting. |
 | `NSX_MAX_WORKERS_HOSTS` | `50` | Thread pool size for the host-discovery phase (probing which addresses in a range are alive). |
@@ -205,16 +234,56 @@ export NSX_MAX_CONCURRENT_HOSTS=16
 export NSX_CONNECT_TIMEOUT=0.3
 ```
 
+## Accounts, Schedules, Alerts, and Change Reports
+
+**Accounts.** The first administrator is created on first start from `NSX_ADMIN_USERNAME` / `NSX_ADMIN_PASSWORD`. Sign in as an admin, open **Users**, and add people with the role they need:
+
+| Role | Can do |
+|---|---|
+| viewer | View the dashboard, scans, reports, schedules, and change reports |
+| analyst | Everything a viewer can, plus start scans and create, pause, or delete schedules |
+| admin | Everything an analyst can, plus add users, change roles, and disable accounts |
+
+Passwords must be at least 10 characters and are stored only as salted hashes.
+
+**Scheduled scans.** Open **Schedules**, enter a target, choose an interval between 15 minutes and 7 days, and tick the authorization box. The first scan starts within a minute, then the scan repeats at that interval. Each run appears in **History**.
+
+**Change reports.** On any scan that has an earlier scan of the same target, the result page has a **What changed since last scan** button. It lists new and closed hosts and ports, new and resolved findings, and risk-score changes.
+
+**Alerts.** When a scan finds a Critical issue that the previous scan of the same target did not, NetSecureX sends an alert. For the first scan of a target, every Critical finding counts as new. To receive alerts:
+
+```bash
+# Webhook (Slack-compatible endpoints accept a JSON POST; check your service's format)
+export NSX_ALERT_WEBHOOK_URL="https://your.endpoint.example/hook"
+
+# E-mail
+export NSX_ALERT_EMAIL_TO="analyst@example.com"
+export NSX_SMTP_HOST="smtp.example.com"
+export NSX_SMTP_PORT="587"
+export NSX_SMTP_USER="sender@example.com"
+export NSX_SMTP_PASSWORD="app-password"
+```
+
+A delivery failure is written to the log and does not stop the scan. Check the log if an alert you expected does not arrive.
+
+**UDP (SNMP).** Each live host is also sent one SNMP v1 request for its system description, using the community string in `NSX_SNMP_COMMUNITY` (default `public`). A reply shows as an open UDP/161 service. Set `NSX_UDP_SCAN=false` to turn this off. Only SNMP is probed; other UDP services are not detected.
+
+**Finding sources.** Each finding is marked *offline* (from the curated signature list) or *live NVD* (from the optional live lookup).
+
 ## Security Notes
 This project was built for academic demonstration, but includes a few practical hardening touches worth calling out in a viva:
-- **Password hashing** — the dashboard login credential is hashed with Werkzeug's PBKDF2-based `generate_password_hash`/`check_password_hash`, not compared in plaintext.
-- **Brute-force login protection** — after `NSX_MAX_LOGIN_ATTEMPTS` (default 5) failed logins, an IP is locked out for `NSX_LOGIN_LOCKOUT_SECONDS` (default 300s) and gets a `429 Too Many Requests` response instead of another password attempt. Tracked in memory per-IP; a successful login clears the counter.
+- **Password hashing** — the dashboard login credential is hashed with Werkzeug's salted `generate_password_hash`/`check_password_hash` (scrypt by default in Werkzeug 3.x), not compared in plaintext.
+- **Brute-force login protection** — after `NSX_MAX_LOGIN_ATTEMPTS` (default 5) failed logins, an IP is locked out for `NSX_LOGIN_LOCKOUT_SECONDS` (default 300s) and gets a `429 Too Many Requests` response instead of another password attempt. The counter is stored in the database, so every process shares it; a successful login clears it.
 - **Hardened session cookies** — `HttpOnly` (JavaScript can't read the cookie, blunting XSS-based session theft), `SameSite=Lax` (not sent on most cross-site requests, blunting CSRF), and an idle timeout (`NSX_SESSION_TIMEOUT_MINUTES`, default 60). `Secure` (HTTPS-only) is off by default since the dev server runs over plain HTTP locally — turn it on via `NSX_SESSION_COOKIE_SECURE=true` once deployed behind HTTPS.
 - **Security headers** — every response sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: same-origin`.
 - **CIDR safety cap** — scans are capped at `NSX_MAX_SCAN_HOSTS` addresses (default 1024, i.e. a /22) so a typo like `10.0.0.0/8` can't trigger a 16-million-address scan.
 - **Authorization gate** — every scan requires an explicit on-screen confirmation before it runs (see [Legal & Ethical Notice](#legal--ethical-notice)).
 - **Structured logging** — logins (including the client IP), lockouts, scan starts/completions/failures, and unhandled server errors are logged via Python's `logging` module instead of stray `print()` calls.
-- Still **not** production-hardened: there's a single shared admin account, the login lockout is in-memory only (resets on restart, and doesn't share state across multiple worker processes), and the Flask development server is single-process. See "Running in Production" below if you need more than a local demo.
+- **Role-based access** — viewers cannot start scans or change schedules; only admins manage accounts. Every role check happens on the server, not only in the menu.
+- **Two-factor sign-in (TOTP)** — optional, per user, from the Security page. Uses RFC 6238 codes from an authenticator app.
+- **CSRF protection** — every form carries a token that the server checks on each submission.
+- **Audit log** — sign-ins, failed attempts, scans, schedules, sharing, account changes, and password resets are recorded and shown to administrators.
+- Still **not** production-hardened: the Flask development server is single-process. See "Running in Production" below if you need more than a local demo.
 
 ## Running in Production
 The built-in `python app.py` uses Flask's development server, which is fine for a local demo but not recommended for real deployment. For anything beyond localhost:
@@ -405,6 +474,57 @@ A Windows machine rounds out the lab nicely — it lets you demonstrate NetSecur
 
 ⚠️ **Keep this on the host-only network too, and never expose it to the public internet.** Unlike deploying the NetSecureX *application* itself (covered in "Deploying to a Public VPS" below, which is safe because it's just a login-gated web app), publicly exposing a Windows Server — especially one running RDP/SMB, and especially if you intentionally weaken its configuration for demo purposes — gets found and attacked by automated internet scanners within hours, and you are liable for whatever it's used for afterward. If you need remote access to *demonstrate* NetSecureX (e.g., for a remote viva), deploy the app on a VPS as described below and keep all scan *targets* strictly on your local, isolated lab network.
 
+## Two-Factor Sign-In, Password Reset, and the Audit Log
+
+**Two-factor sign-in.** Open **Security** from the navigation bar and choose *Set up two-factor sign-in*. Add the setup key to an authenticator app, then enter the 6-digit code the app shows. From then on, each sign-in asks for a code after the password. Codes change every 30 seconds and are accepted within one step either side, to allow for clock drift. Turning it off needs a current code. Codes are computed with the standard library only (RFC 6238).
+
+**Password reset.** An administrator clicks *Reset password* on the Users page. The link (valid 30 minutes, used once) is shown in the confirmation message, so the administrator passes it on by a channel they trust. The person opens the link, chooses a password of at least ten characters, and signs in again. Expired or used links are refused.
+
+**Audit log.** Administrators open **Audit Log** to see sign-ins, failed attempts, scans started, schedules created or run, scans shared, accounts changed, and reports downloaded. Filter by user name, and show up to 1,000 events. The application writes the entries; they cannot be edited from the interface.
+
+## Scan Ownership and Sharing
+
+Each scan records the user who started it. Scheduled scans belong to the user who created the schedule.
+
+| Role | Scans it can see |
+|---|---|
+| viewer | All scans, read only |
+| analyst | Scans it owns, and scans shared with it |
+| admin | All scans |
+
+To share, open a scan you own and enter a user name in the sharing panel. Only the owner or an administrator can share or remove access. Analysts can only pause or delete schedules they created. Scans recorded before this version have no owner, so analysts cannot see them until an administrator shares them.
+
+## Offline NVD Feed
+
+Live lookups need internet access during the scan. A local feed lets a deployment use NVD data without that. Download the NVD CVE 2.0 data, convert it once, and point NetSecureX at the result:
+
+```bash
+python tools/import_nvd_feed.py nvd-cve.json netsecurex-feed.json
+export NSX_NVD_FEED_PATH=netsecurex-feed.json      # Windows: set NSX_NVD_FEED_PATH=...
+```
+
+Findings from the feed are labelled **NVD feed** on the results page and in the Word report. A feed match needs every word of the detected version to appear in the CVE description, so it is a conservative match.
+
+## UDP Probes
+
+Each live host is also checked on three UDP services, each with a protocol-specific request:
+
+- **SNMP (161):** a version 1 GetRequest for the system description, using the community string in `NSX_SNMP_COMMUNITY`.
+- **DNS (53):** a query for the `version.bind` TXT record. Any valid reply shows a DNS service, and the version text is shown when the server gives one.
+- **NTP (123):** a client request. A server reply shows an NTP service and its stratum.
+
+Set `NSX_UDP_PROBES` to choose which probes run, for example `snmp` alone.
+
+## Screenshots and Demo Data
+To produce screenshots of the running application without scanning anything, seed a demonstration database and render the pages:
+
+```bash
+python tools/seed_demo.py demo.db                 # two scans, one schedule, three accounts
+python tools/render_screenshots.py demo.db screenshots/
+```
+
+Rendering needs `wkhtmltoimage` on the PATH (for example `sudo apt install wkhtmltopdf` on Linux, or the installer from wkhtmltopdf.org on Windows). The seeded data is invented for demonstration and is labelled as such in the report and the presentation. Sign in as `demo` / `demo-password-1` to explore the seeded database.
+
 ## Risk Scoring Formula
 ```
 host_risk = Σ (vuln_cvss_score × exposure_weight) / open_port_count
@@ -423,6 +543,6 @@ Unauthorized network scanning may violate computer misuse laws.
 This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details. The license includes an additional notice restricting use to authorized systems only; see the [Legal & Ethical Notice](#legal--ethical-notice) above.
 
 ## Future Scope
-- Email/webhook alerting on new Critical findings
-- Role-based multi-analyst accounts with hashed credentials
-- Displaying live-CVE vs. offline-signature source tags in the report/dashboard (currently tracked internally via `"source"` but not yet surfaced in the UI)
+- Further UDP services beyond SNMP, DNS, and NTP (each needs its own probe)
+- Sending a scheduled scan's change report by e-mail, not just the alert
+- Using Redis or similar to share live scan progress across several worker processes (the progress bar still uses one worker)
