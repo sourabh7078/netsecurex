@@ -24,6 +24,20 @@
 
 <div class="panel">
   <a href="{{ url_for('download_report', scan_id=scan.id) }}" class="btn-inline">📄 Download Full Report (.docx)</a>
+  {% if has_previous %}
+  <a href="{{ url_for('scan_changes', scan_id=scan.id) }}" class="btn-inline btn-secondary">🔄 What changed since last scan</a>
+  {% endif %}
+<div class="panel">
+  <p class="muted">Owner: <strong>{{ scan.owner or 'unknown' }}</strong>.
+    {% if shares %}Shared with: {% for u in shares %}<span class="badge badge-src-offline">{{ u }}</span>{% if can_manage %} <form method="POST" action="{{ url_for('scan_unshare', scan_id=scan.id, username=u) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn-small btn-danger" type="submit">remove</button></form>{% endif %} {% endfor %}{% else %}Not shared with anyone.{% endif %}</p>
+  {% if can_manage %}
+  <form method="POST" action="{{ url_for('scan_share', scan_id=scan.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div><label>Share with user name</label><br><input type="text" name="username" required></div>
+    <button type="submit">Share</button>
+  </form>
+  {% endif %}
+</div>
 </div>
 
 <!-- Zenmap-style view tabs -->
@@ -53,7 +67,8 @@
               <td>{{ port.port_no }}</td>
               <td>{{ port.service }}</td>
               <td>{{ port.version or '-' }}</td>
-              <td>{{ v.cve_id }}</td>
+              <td>{{ v.cve_id }}
+                {% if v.source == 'live-nvd' %}<span class="badge badge-src-live">live NVD</span>{% elif v.source == 'nvd-feed' %}<span class="badge badge-src-live">NVD feed</span>{% else %}<span class="badge badge-src-offline">offline</span>{% endif %}</td>
               <td><span class="badge badge-sev-{{ v.severity|lower }}">{{ v.severity }} ({{ v.cvss_score }})</span></td>
             </tr>
             {% endfor %}

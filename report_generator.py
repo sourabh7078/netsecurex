@@ -197,7 +197,7 @@ def _add_findings(doc, summary):
                     row_cells[0].text = str(port.port_no)
                     row_cells[1].text = port.service
                     row_cells[2].text = port.version or "-"
-                    row_cells[3].text = v.cve_id
+                    row_cells[3].text = v.cve_id + (" (live NVD)" if getattr(v, "source", "") == "live-nvd" else (" (NVD feed)" if getattr(v, "source", "") == "nvd-feed" else ""))
                     row_cells[4].text = f"{v.severity} ({v.cvss_score})"
                     _shade_cell(row_cells[4], {
                         "Critical": "F8CBCB", "High": "FCE0C6",

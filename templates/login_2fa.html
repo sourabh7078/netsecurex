@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Two-factor sign-in - NetSecureX{% endblock %}
+{% block content %}
+<div class="login-box">
+  <h1>Two-factor sign-in</h1>
+  <p class="subtitle">Enter the 6-digit code from your authenticator app.</p>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+  {% endwith %}
+  <form method="POST" action="{{ url_for('login_2fa') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Code</label>
+    <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required autofocus>
+    <button type="submit">Verify</button>
+  </form>
+  <p class="hint"><a href="{{ url_for('login') }}">Back to sign-in</a></p>
+</div>
+{% endblock %}

@@ -4,7 +4,7 @@
 <h1>Start a New Scan</h1>
 
 <div class="panel form-panel">
-  <form method="POST" id="newScanForm">
+  <form method="POST" id="newScanForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Target (IP, hostname, or CIDR range e.g. 192.168.56.0/24)</label>
     <input type="text" name="target" placeholder="192.168.56.101" required>
 

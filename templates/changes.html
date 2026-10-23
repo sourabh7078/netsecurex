@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Changes - NetSecureX{% endblock %}
+{% block content %}
+<h1>What changed — scan #{{ scan.id }}</h1>
+<p class="muted">Target {{ scan.target_range }} · {{ scan.start_time.strftime('%Y-%m-%d %H:%M') }} UTC</p>
+
+{% if not previous %}
+<div class="panel">
+  <p class="empty-state">There is no earlier completed scan of this target to compare with. Run the same target again, or set up a schedule, and this page will show the differences.</p>
+</div>
+{% else %}
+<div class="panel">
+  <p>Compared with scan #{{ previous.id }} from {{ previous.start_time.strftime('%Y-%m-%d %H:%M') }} UTC.</p>
+  <div class="stat-cards">
+    <div class="stat-card"><div class="stat-value">{{ diff.new_hosts|length }}</div><div class="stat-label">New hosts</div></div>
+    <div class="stat-card"><div class="stat-value">{{ diff.removed_hosts|length }}</div><div class="stat-label">Hosts gone</div></div>
+    <div class="stat-card critical"><div class="stat-value">{{ diff.new_findings|length }}</div><div class="stat-label">New findings</div></div>
+    <div class="stat-card"><div class="stat-value">{{ diff.resolved_findings|length }}</div><div class="stat-label">Resolved findings</div></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>New hosts</h2>
+  {% if diff.new_hosts %}<ul class="diff-list">{% for ip in diff.new_hosts %}<li>{{ ip }}</li>{% endfor %}</ul>{% else %}<p class="empty-state">None.</p>{% endif %}
+  <h2>Hosts no longer found</h2>
+  {% if diff.removed_hosts %}<ul class="diff-list">{% for ip in diff.removed_hosts %}<li>{{ ip }}</li>{% endfor %}</ul>{% else %}<p class="empty-state">None.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h2>Ports</h2>
+  <p><strong>Newly open:</strong></p>
+  {% if diff.new_ports %}<ul class="diff-list">{% for p in diff.new_ports %}<li>{{ p.ip }} · {{ p.port }} ({{ p.service }})</li>{% endfor %}</ul>{% else %}<p class="empty-state">None.</p>{% endif %}
+  <p><strong>Closed:</strong></p>
+  {% if diff.closed_ports %}<ul class="diff-list">{% for p in diff.closed_ports %}<li>{{ p.ip }} · {{ p.port }} ({{ p.service }})</li>{% endfor %}</ul>{% else %}<p class="empty-state">None.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h2>Findings</h2>
+  <p><strong>New:</strong></p>
+  {% if diff.new_findings %}
+  <table class="data-table"><thead><tr><th>Host</th><th>Port</th><th>CVE</th><th>Severity</th></tr></thead><tbody>
+    {% for f in diff.new_findings %}<tr><td>{{ f.ip }}</td><td>{{ f.port }}</td><td>{{ f.cve }}</td><td><span class="badge badge-sev-{{ f.severity|lower }}">{{ f.severity }}</span></td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="empty-state">None.</p>{% endif %}
+  <p><strong>Resolved:</strong></p>
+  {% if diff.resolved_findings %}
+  <table class="data-table"><thead><tr><th>Host</th><th>Port</th><th>CVE</th><th>Severity</th></tr></thead><tbody>
+    {% for f in diff.resolved_findings %}<tr><td>{{ f.ip }}</td><td>{{ f.port }}</td><td>{{ f.cve }}</td><td><span class="badge badge-sev-{{ f.severity|lower }}">{{ f.severity }}</span></td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="empty-state">None.</p>{% endif %}
+</div>
+
+<div class="panel">
+  <h2>Risk changes</h2>
+  {% if diff.risk_changes %}
+  <ul class="diff-list">{% for r in diff.risk_changes %}<li>{{ r.ip }}: {{ r.before }} → {{ r.after }}</li>{% endfor %}</ul>
+  {% else %}<p class="empty-state">No host changed its risk score.</p>{% endif %}
+</div>
+{% endif %}
+<a href="{{ url_for('scan_result', scan_id=scan.id) }}" class="btn-inline">← Back to scan result</a>
+{% endblock %}

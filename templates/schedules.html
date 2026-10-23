@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Schedules - NetSecureX{% endblock %}
+{% block content %}
+<h1>Scheduled scans</h1>
+<p class="muted">A schedule runs a scan of its target at the interval you set. Each run is recorded in History, and a change report is available for every run after the first.</p>
+
+{% if can_scan %}
+<div class="panel">
+  <h2>New schedule</h2>
+  <form method="POST" action="{{ url_for('schedule_create') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div><label>Target (IP, host name, or CIDR)</label><br>
+      <input type="text" name="target" placeholder="192.168.56.0/24" required></div>
+    <div><label>Every (minutes)</label><br>
+      <input type="number" name="interval_minutes" value="1440" min="{{ min_interval }}" max="{{ max_interval }}" required></div>
+    <div><label class="checkbox-label"><input type="checkbox" name="authorized" required>
+      I am authorized to scan this target on every run.</label></div>
+    <button type="submit">Create schedule</button>
+  </form>
+  <p class="muted">Interval must be between {{ min_interval }} minutes and {{ max_interval }} minutes ({{ (max_interval // 1440) }} days).</p>
+</div>
+{% endif %}
+
+<div class="panel">
+  {% if schedules %}
+  <table class="data-table">
+    <thead><tr><th>Target</th><th>Every</th><th>Status</th><th>Next run (UTC)</th><th>Last scan</th><th>Created by</th><th></th></tr></thead>
+    <tbody>
+    {% for s in schedules %}
+      <tr>
+        <td>{{ s.target_range }}</td>
+        <td>{{ s.interval_minutes }} min</td>
+        <td><span class="badge badge-{{ 'completed' if s.enabled else 'failed' }}">{{ 'enabled' if s.enabled else 'paused' }}</span></td>
+        <td>{{ s.next_run_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{% if s.last_scan_id %}<a href="{{ url_for('scan_result', scan_id=s.last_scan_id) }}">#{{ s.last_scan_id }}</a>{% else %}—{% endif %}</td>
+        <td>{{ s.created_by }}</td>
+        <td>
+          {% if can_scan %}
+          <form method="POST" action="{{ url_for('schedule_toggle', sched_id=s.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn-small" type="submit">{{ 'Pause' if s.enabled else 'Resume' }}</button></form>
+          <form method="POST" action="{{ url_for('schedule_delete', sched_id=s.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn-small btn-danger" type="submit">Delete</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">No schedules yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

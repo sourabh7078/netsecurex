@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Security - NetSecureX{% endblock %}
+{% block content %}
+<h1>Account security</h1>
+<p class="muted">Signed in as <strong>{{ user.username }}</strong> ({{ user.role }}).</p>
+
+<div class="panel">
+  <h2>Two-factor sign-in</h2>
+  {% if user.totp_enabled %}
+    <p>Status: <span class="badge badge-completed">on</span>. Each sign-in asks for a code from your authenticator app.</p>
+    <form method="POST" action="{{ url_for('security_2fa_disable') }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label>Current code</label><br><input type="text" name="code" inputmode="numeric" maxlength="6" required></div>
+      <button type="submit" class="btn-danger">Turn off</button>
+    </form>
+  {% elif pending %}
+    <p>Add this key to your authenticator app (Google Authenticator, Microsoft Authenticator, or similar), then enter the 6-digit code it shows.</p>
+    <p><strong>Setup key:</strong> <code>{{ pending }}</code></p>
+    <p class="muted">Account link: <code>{{ uri }}</code></p>
+    <form method="POST" action="{{ url_for('security_2fa_enable') }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label>Code from the app</label><br><input type="text" name="code" inputmode="numeric" maxlength="6" required></div>
+      <button type="submit">Turn on</button>
+    </form>
+  {% else %}
+    <p>Status: <span class="badge badge-failed">off</span>. Two-factor sign-in adds a code from an authenticator app to your password.</p>
+    <form method="POST" action="{{ url_for('security_2fa_start') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit">Set up two-factor sign-in</button>
+    </form>
+  {% endif %}
+</div>
+<div class="panel">
+  <h2>Password</h2>
+  <p class="muted">To change your password, ask an administrator for a reset link. Links expire after 30 minutes and can be used once.</p>
+</div>
+{% endblock %}

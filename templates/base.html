@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}NetSecureX{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 </head>
 <body>
   {% if session.logged_in %}
@@ -14,9 +14,13 @@
     <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">☰</button>
     <div class="nav-links" id="navLinks">
       <a href="{{ url_for('dashboard') }}">Dashboard</a>
-      <a href="{{ url_for('new_scan') }}">New Scan</a>
+      {% if can_scan %}<a href="{{ url_for('new_scan') }}">New Scan</a>{% endif %}
+      <a href="{{ url_for('schedules') }}">Schedules</a>
       <a href="{{ url_for('history') }}">History</a>
-      <a href="{{ url_for('logout') }}" class="nav-logout">Logout ({{ session.username }})</a>
+      {% if is_admin %}<a href="{{ url_for('users') }}">Users</a>{% endif %}
+      <a href="{{ url_for('security') }}">Security</a>
+      {% if is_admin %}<a href="{{ url_for('audit_log') }}">Audit Log</a>{% endif %}
+      <a href="{{ url_for('logout') }}" class="nav-logout">Logout ({{ session.username }}, {{ session.role }})</a>
     </div>
   </nav>
   <script>

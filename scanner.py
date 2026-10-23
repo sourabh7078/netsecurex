@@ -29,6 +29,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import cve_lookup
+from udp_probe import udp_port_results
 
 # ---------------------------------------------------------------------------
 # Optional real-Nmap integration
@@ -196,6 +197,7 @@ SERVICE_MAP = {
     8080: "http-proxy", 8180: "http-tomcat", 8443: "https-alt",
     9090: "http", 9200: "elasticsearch", 9418: "git", 11211: "memcached",
     27017: "mongodb",
+    161: "snmp",
 }
 
 
@@ -403,6 +405,7 @@ def _scan_one_host(ip, ports):
 
     if open_ports is None:
         open_ports = scan_ports(ip, ports=ports)
+        open_ports = sorted(open_ports + udp_port_results(ip), key=lambda p: p["port"])
         os_guess = guess_os(ip, open_ports)
 
     for p in open_ports:
@@ -454,6 +457,7 @@ def run_scan(target, ports=None, progress_cb=None):
 
         if open_ports is None:
             open_ports = scan_ports(ip, ports=ports, progress_cb=cb, progress_offset=30, progress_span=60)
+            open_ports = sorted(open_ports + udp_port_results(ip), key=lambda p: p["port"])
             os_guess = guess_os(ip, open_ports)
 
         for p in open_ports:

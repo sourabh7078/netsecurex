@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Users - NetSecureX{% endblock %}
+{% block content %}
+<h1>User accounts</h1>
+<p class="muted">Viewer: sees scans and reports. Analyst: also starts scans and schedules. Admin: also manages accounts. At least one active administrator must remain.</p>
+
+<div class="panel">
+  <h2>Add a user</h2>
+  <form method="POST" action="{{ url_for('user_create') }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div><label>Username</label><br><input type="text" name="username" required></div>
+    <div><label>Password (10+ characters)</label><br><input type="password" name="password" required></div>
+    <div><label>Role</label><br>
+      <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == 'analyst' %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <button type="submit">Create user</button>
+  </form>
+</div>
+
+<div class="panel">
+  <table class="data-table">
+    <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Two-factor</th><th>Change role</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.username }}{% if u.id == session.user_id %} <span class="muted">(you)</span>{% endif %}</td>
+        <td>{{ u.role }}</td>
+        <td><span class="badge badge-{{ 'completed' if u.is_active else 'failed' }}">{{ 'active' if u.is_active else 'disabled' }}</span></td>
+        <td>{{ 'on' if u.totp_enabled else 'off' }}</td>
+        <td>
+          <form method="POST" action="{{ url_for('user_set_role', user_id=u.id) }}" class="inline-form" style="margin:0"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="role">{% for r in roles %}<option value="{{ r }}" {% if r == u.role %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+            <button class="btn-small" type="submit">Save</button>
+          </form>
+        </td>
+        <td>
+          <form method="POST" action="{{ url_for('user_issue_reset', user_id=u.id) }}" style="display:inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn-small" type="submit">Reset password</button>
+          </form>
+          <form method="POST" action="{{ url_for('user_toggle', user_id=u.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn-small {{ 'btn-danger' if u.is_active else '' }}" type="submit">{{ 'Disable' if u.is_active else 'Enable' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

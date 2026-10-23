@@ -13,13 +13,13 @@
     {% endif %}
   {% endwith %}
 
-  <form method="POST">
+  <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Username</label>
     <input type="text" name="username" required autofocus>
     <label>Password</label>
     <input type="password" name="password" required>
     <button type="submit">Log In</button>
   </form>
-  <p class="hint">Demo credentials: admin / admin123</p>
+  <p class="hint">The first administrator is set by NSX_ADMIN_USERNAME and NSX_ADMIN_PASSWORD.</p>
 </div>
 {% endblock %}
